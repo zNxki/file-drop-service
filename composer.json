@@ -1,0 +1,31 @@
+{
+    "name": "filedrop/file-drop",
+    "description": "Mini servizio web per condividere file tramite codice univoco.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.2",
+        "ext-pdo": "*",
+        "ext-pdo_sqlite": "*",
+        "vlucas/phpdotenv": "^5.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "FileDrop\\": "src/"
+        }
+    },
+    "scripts": {
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php -d upload_max_filesize=512M -d post_max_size=520M -d memory_limit=256M -S localhost:8000 -t public public/index.php"
+        ],
+        "cleanup": "@php bin/cleanup.php",
+        "post-create-project-cmd": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ]
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

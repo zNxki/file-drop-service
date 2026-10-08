@@ -1,0 +1,40 @@
+<?php
+declare(strict_types=1);
+
+namespace FileDrop\Support;
+
+use PDO;
+
+final class Database
+{
+    public static function connect(string $path): PDO
+    {
+        $dir = dirname($path);
+        if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) {
+            throw new \RuntimeException("Couldn't create the folder: $dir");
+        }
+
+        $pdo = new PDO('sqlite:' . $path, options: [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        ]);
+        $pdo->exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+        $pdo->exec(<<<'SQL'
+            CREATE TABLE IF NOT EXISTS files (
+                code              TEXT PRIMARY KEY,
+                original_name     TEXT NOT NULL,
+                stored_name       TEXT NOT NULL UNIQUE,
+                mime_type         TEXT NOT NULL,
+                size              INTEGER NOT NULL,
+                password_hash     TEXT,
+                delete_token_hash TEXT NOT NULL,
+                downloads         INTEGER NOT NULL DEFAULT 0,
+                created_at        INTEGER NOT NULL,
+                expires_at        INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_files_expires ON files (expires_at);
+        SQL);
+
+        return $pdo;
+    }
+}
