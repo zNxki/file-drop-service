@@ -14,6 +14,30 @@
         t.textContent = dateFmt.format(new Date(t.getAttribute('datetime')));
     });
 
+    const qrBox = $('#share-qr');
+    if (qrBox && typeof qrcode === 'function') {
+        try {
+            const qr = qrcode(0, 'M');
+            qr.addData(qrBox.dataset.url);
+            qr.make();
+            $('#share-qr-code').innerHTML = qr.createSvgTag({ cellSize: 4, scalable: true, alt: 'QR code con il link di download' });
+            qrBox.hidden = false;
+        } catch (_) { }
+    }
+
+    const previewText = $('#preview-text');
+    if (previewText) {
+        const LIMIT = 65536;
+        fetch(previewText.dataset.src, { headers: { Range: `bytes=0-${LIMIT - 1}` } })
+            .then((res) => { if (!res.ok) throw new Error(res.status); return res.text(); })
+            .then((text) => {
+                previewText.textContent = text.slice(0, LIMIT);
+                previewText.hidden = false;
+                $('#preview-note').hidden = Number(previewText.dataset.size) <= LIMIT;
+            })
+            .catch(() => { });
+    }
+
     const form = $('#upload-form');
     if (!form) return;
 
@@ -115,9 +139,12 @@
         uploaded = d;
         $('#code').textContent = d.code;
         $('#share-url').value = d.url;
+        const notes = [];
+        if (d.protected) notes.push('protetto da password');
+        if (d.max_downloads) notes.push(d.max_downloads === 1 ? 'si elimina dopo il primo download' : `si elimina dopo ${d.max_downloads} download`);
         $('#result-meta').textContent =
             `${d.name}, ${fmtBytes(d.size)}. Scade il ${dateFmt.format(new Date(d.expires_at))}` +
-            (d.protected ? ', protetto da password.' : '.');
+            (notes.length ? ', ' + notes.join(', ') + '.' : '.');
         form.hidden = true;
         result.hidden = false;
         $('#copy').focus();

@@ -1,0 +1,24 @@
+{
+  "name": "file-drop",
+  "version": "1.0.0",
+  "description": "Mini servizio web per condividere file tramite codice univoco.",
+  "homepage": "https://github.com/zNxki/file-drop-service#readme",
+  "bugs": {
+    "url": "https://github.com/zNxki/file-drop-service/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zNxki/file-drop-service.git"
+  },
+  "license": "MIT",
+  "author": "zNxki_",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "vendor": "node -e \"require('fs').cpSync('node_modules/qrcode-generator/dist/qrcode.js','public/assets/vendor/qrcode.js')\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  }
+}

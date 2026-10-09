@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace FileDrop\Model;
 
+use FileDrop\Support\Preview;
+
 final readonly class StoredFile
 {
     public function __construct(
@@ -16,6 +18,7 @@ final readonly class StoredFile
         public int $downloads,
         public int $createdAt,
         public int $expiresAt,
+        public ?int $maxDownloads = null,
     ) {
     }
 
@@ -32,6 +35,7 @@ final readonly class StoredFile
             (int) $r['downloads'],
             (int) $r['created_at'],
             (int) $r['expires_at'],
+            $r['max_downloads'] === null ? null : (int) $r['max_downloads'],
         );
     }
 
@@ -45,6 +49,24 @@ final readonly class StoredFile
         return $this->expiresAt <= ($now ?? time());
     }
 
+    public function isExhausted(): bool
+    {
+        return $this->maxDownloads !== null && $this->downloads >= $this->maxDownloads;
+    }
+
+    public function remainingDownloads(): ?int
+    {
+        return $this->maxDownloads === null ? null : max(0, $this->maxDownloads - $this->downloads);
+    }
+
+    public function previewKind(): ?string
+    {
+        if ($this->isProtected() || $this->maxDownloads !== null) {
+            return null;
+        }
+        return Preview::kind($this->mimeType);
+    }
+
     public function toArray(string $baseUrl): array
     {
         return [
@@ -54,10 +76,13 @@ final readonly class StoredFile
             'mime_type' => $this->mimeType,
             'protected' => $this->isProtected(),
             'downloads' => $this->downloads,
+            'max_downloads' => $this->maxDownloads,
+            'remaining_downloads' => $this->remainingDownloads(),
             'created_at' => date(DATE_ATOM, $this->createdAt),
             'expires_at' => date(DATE_ATOM, $this->expiresAt),
             'url' => $baseUrl . '/d/' . $this->code,
             'download_url' => $baseUrl . '/api/files/' . $this->code . '/download',
+            'preview_url' => $this->previewKind() === null ? null : $baseUrl . '/d/' . $this->code . '/preview',
         ];
     }
 }

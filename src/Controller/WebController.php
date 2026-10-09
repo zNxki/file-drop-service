@@ -8,6 +8,7 @@ use FileDrop\Http\Request;
 use FileDrop\Http\Response;
 use FileDrop\Service\FileService;
 use FileDrop\Support\Config;
+use FileDrop\Support\Preview;
 use FileDrop\Support\View;
 
 final class WebController extends Controller
@@ -36,11 +37,11 @@ final class WebController extends Controller
             'maxSize' => $this->config->maxFileSize,
             'options' => $options,
             'defaultExpiry' => $this->config->defaultExpiry,
+            'maxDownloads' => FileService::MAX_DOWNLOADS,
             'baseUrl' => $this->baseUrl($request),
         ]));
     }
 
-    /** GET /d/{code} */
     public function show(Request $request, array $params): Response
     {
         $file = $this->files->get($params['code']);
@@ -50,6 +51,7 @@ final class WebController extends Controller
             'script' => true,
             'file' => $file,
             'error' => null,
+            'shareUrl' => $this->baseUrl($request) . '/d/' . $file->code,
         ]));
     }
 
@@ -70,13 +72,37 @@ final class WebController extends Controller
                 'script' => true,
                 'file' => $file,
                 'error' => $e->getMessage(),
+                'shareUrl' => $this->baseUrl($request) . '/d/' . $file->code,
             ]), $e->status);
         }
 
-        $path = $this->files->path($file);
-        $this->files->recordDownload($file);
+        $handle = $this->files->openDownload($file);
 
-        return Response::file($path, $file->originalName, $file->mimeType, $file->size);
+        return Response::download(
+            $handle,
+            $file->originalName,
+            $file->mimeType,
+            $file->size,
+            fn() => $this->files->completeDownload($file->code),
+        );
+    }
+
+    public function preview(Request $request, array $params): Response
+    {
+        $file = $this->files->get($params['code']);
+        $kind = $file->previewKind();
+        if ($kind === null) {
+            throw new HttpException(404, 'Anteprima non disponibile per questo file.');
+        }
+
+        return Response::inline(
+            $this->files->openPreview($file),
+            $file->originalName,
+            Preview::contentType($kind, $file->mimeType),
+            $file->size,
+            $request->header('Range'),
+            Preview::headers($kind),
+        );
     }
 
     public function error(HttpException $e): Response

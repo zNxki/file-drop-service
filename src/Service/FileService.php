@@ -10,6 +10,8 @@ use FileDrop\Model\StoredFile;
 
 final class FileService
 {
+    public const MAX_DOWNLOADS = 1000;
+
     public function __construct(
         private readonly Config $config,
         private readonly FileRepository $repository,
@@ -17,11 +19,11 @@ final class FileService
     ) {
     }
 
-    public function upload(?array $upload, ?int $ttl, ?string $password): array
+    public function upload(?array $upload, ?int $ttl, ?string $password, ?int $maxDownloads = null): array
     {
         $ttl ??= $this->config->defaultExpiry;
         if ($ttl < 60 || $ttl > $this->config->maxExpiry) {
-            throw new HttpException(442, sprintf(
+            throw new HttpException(422, sprintf(
                 'La scadenza deve essere tra 60 e %d secondi.',
                 $this->config->maxExpiry
             ));
@@ -30,6 +32,10 @@ final class FileService
         $password = ($password === null || $password === '') ? null : $password;
         if ($password !== null && (strlen($password) < 4 || strlen($password) > 200)) {
             throw new HttpException(422, 'La password deve contenere da 4 a 200 caratteri.');
+        }
+
+        if ($maxDownloads !== null && ($maxDownloads < 1 || $maxDownloads > self::MAX_DOWNLOADS)) {
+            throw new HttpException(422, sprintf('Il numero di download deve essere tra 1 e %d.', self::MAX_DOWNLOADS));
         }
 
         if ($upload === null || !isset($upload['error']) || is_array($upload['error'])) {
@@ -81,6 +87,7 @@ final class FileService
                 0,
                 $now,
                 $now + $ttl,
+                $maxDownloads,
             );
             if ($this->repository->insert($file)) {
                 return ['file' => $file, 'deleteToken' => $deleteToken];
@@ -100,6 +107,9 @@ final class FileService
         if ($file->isExpired()) {
             $this->remove($file);
             throw new HttpException(410, 'Il file è scaduto ed è stato eliminato.');
+        }
+        if ($file->isExhausted()) {
+            throw new HttpException(410, 'Il file ha raggiunto il numero massimo di download.');
         }
         return $file;
     }
@@ -128,9 +138,27 @@ final class FileService
         return $path;
     }
 
-    public function recordDownload(StoredFile $file): void
+    public function openDownload(StoredFile $file)
     {
-        $this->repository->incrementDownloads($file->code);
+        $handle = $this->openHandle($file);
+        if (!$this->repository->claimDownload($file->code)) {
+            fclose($handle);
+            throw new HttpException(410, 'Il file ha raggiunto il numero massimo di download.');
+        }
+        return $handle;
+    }
+
+    public function completeDownload(string $code): void
+    {
+        $file = $this->repository->find($code);
+        if ($file !== null && $file->isExhausted()) {
+            $this->remove($file);
+        }
+    }
+
+    public function openPreview(StoredFile $file)
+    {
+        return $this->openHandle($file);
     }
 
     public function delete(string $code, ?string $token): void
@@ -144,7 +172,7 @@ final class FileService
 
     public function purgeExpired(): int
     {
-        $expired = $this->repository->findExpired(time());
+        $expired = $this->repository->findPurgeable(time());
         foreach ($expired as $file) {
             $this->remove($file);
         }
@@ -156,6 +184,15 @@ final class FileService
         if (mt_rand() / mt_getrandmax() < $this->config->cleanupProbability) {
             $this->purgeExpired();
         }
+    }
+
+    private function openHandle(StoredFile $file)
+    {
+        $handle = @fopen($this->path($file), 'rb');
+        if ($handle === false) {
+            throw new HttpException(500, 'Impossibile leggere il file.');
+        }
+        return $handle;
     }
 
     private function remove(StoredFile $file): void

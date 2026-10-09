@@ -16,8 +16,8 @@ final class FileRepository
     public function insert(StoredFile $f): bool
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO files (code, original_name, stored_name, mime_type, size, password_hash, delete_token_hash, downloads, created_at, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)'
+            'INSERT INTO files (code, original_name, stored_name, mime_type, size, password_hash, delete_token_hash, downloads, max_downloads, created_at, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)'
         );
         try {
             $stmt->execute([
@@ -28,6 +28,7 @@ final class FileRepository
                 $f->size,
                 $f->passwordHash,
                 $f->deleteTokenHash,
+                $f->maxDownloads,
                 $f->createdAt,
                 $f->expiresAt,
             ]);
@@ -53,14 +54,21 @@ final class FileRepository
         $this->pdo->prepare('DELETE FROM files WHERE code = ?')->execute([$code]);
     }
 
-    public function incrementDownloads(string $code): void
+    public function claimDownload(string $code): bool
     {
-        $this->pdo->prepare('UPDATE files SET downloads = downloads + 1 WHERE code = ?')->execute([$code]);
+        $stmt = $this->pdo->prepare(
+            'UPDATE files SET downloads = downloads + 1
+             WHERE code = ? AND (max_downloads IS NULL OR downloads < max_downloads)'
+        );
+        $stmt->execute([$code]);
+        return $stmt->rowCount() === 1;
     }
 
-    public function findExpired(int $now): array
+    public function findPurgeable(int $now): array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM files WHERE expires_at <= ?');
+        $stmt = $this->pdo->prepare(
+            'SELECT * FROM files WHERE expires_at <= ? OR (max_downloads IS NOT NULL AND downloads >= max_downloads)'
+        );
         $stmt->execute([$now]);
         return array_map(StoredFile::fromRow(...), $stmt->fetchAll());
     }

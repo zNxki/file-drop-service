@@ -12,6 +12,9 @@ File Drop è un mini servizio web in PHP: carichi un file, ottieni un codice bre
 - Upload con **barra di avanzamento**, velocità e tempo residuo (drag and drop incluso)
 - **Codice univoco** per ogni file, senza caratteri ambigui (`0 O o 1 l I`)
 - Download tramite codice: `/d/{codice}`
+- **QR code** nella pagina di download, per passare il link al telefono con la fotocamera
+- **Download singolo o a numero limitato** (`max_downloads`): all'ultimo download il file si elimina da solo
+- **Anteprima inline** per immagini, PDF, video e testo, solo per i tipi MIME in whitelist
 - **Limite di dimensione** configurabile
 - **Scadenza automatica**: scelta dall'utente, con massimo configurabile
 - **Password opzionale** (salvata con `password_hash`)
@@ -68,10 +71,10 @@ Base URL: `http://localhost:8000`. Le risposte sono JSON.
 
 ### Upload
 
-Campi `multipart/form-data`: `file` (obbligatorio), `expires_in` in secondi (facoltativo), `password` (facoltativa, da 4 a 200 caratteri).
+Campi `multipart/form-data`: `file` (obbligatorio), `expires_in` in secondi (facoltativo), `password` (facoltativa, da 4 a 200 caratteri), `max_downloads` (facoltativo, da 1 a 1000; assente o vuoto = illimitati).
 
 ```bash
-curl -F file=@foto.jpg -F expires_in=3600 -F password=segreto http://localhost:8000/api/files
+curl -F file=@foto.jpg -F expires_in=3600 -F password=segreto -F max_downloads=1 http://localhost:8000/api/files
 ```
 
 ```json
@@ -83,10 +86,13 @@ curl -F file=@foto.jpg -F expires_in=3600 -F password=segreto http://localhost:8
     "mime_type": "image/jpeg",
     "protected": true,
     "downloads": 0,
+    "max_downloads": 1,
+    "remaining_downloads": 1,
     "created_at": "2026-10-08T12:36:50+00:00",
     "expires_at": "2026-10-08T13:36:50+00:00",
     "url": "http://localhost:8000/d/8Kf2a",
     "download_url": "http://localhost:8000/api/files/8Kf2a/download",
+    "preview_url": null,
     "delete_token": "e5b62173473e94db183614fd10e24059"
   }
 }
@@ -104,6 +110,32 @@ curl -X DELETE -H "X-Delete-Token: e5b6..." http://localhost:8000/api/files/8Kf2
 
 La password si passa nell'header `X-File-Password`, mai nell'URL.
 
+### Download singolo o limitato
+
+Con `max_downloads=1` il link è usa e getta; con `max_downloads=N` vale per N download. Regole:
+
+- Il download viene **contato appena parte**, in modo atomico: richieste simultanee non possono superare il limite. Un download interrotto a metà resta contato, altrimenti basterebbe interromperlo per leggere il file più volte.
+- All'ultimo download il file e il record vengono **eliminati subito**. Da quel momento il codice risponde `404` (o `410` se la richiesta arriva mentre l'ultimo trasferimento è ancora in corso).
+- Visitare la pagina `/d/{codice}` **non** consuma download: conta solo la richiesta a `/download`. Attenzione però a chi apre direttamente quell'URL (antivirus, bot di anteprima, "scarica con..."): consuma il download.
+- Le password sbagliate non consumano download.
+- Per i download non sono accettati header `Range`: una ripresa a pezzi conterebbe più volte.
+- Il campo `remaining_downloads` dell'API dice quanti ne restano (`null` se illimitati).
+
+### Anteprima inline
+
+La pagina `/d/{codice}` mostra l'anteprima di immagini, video e file di testo; per i PDF c'è il pulsante «Apri anteprima PDF». Il contenuto è servito da `/d/{codice}/preview` con `Content-Disposition: inline`, **solo** se il MIME rilevato dal contenuto (`finfo`, non dal nome o dall'header del client) è in questa whitelist, con confronto esatto:
+
+| Tipo | MIME |
+|---|---|
+| Immagini | `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `image/avif` |
+| PDF | `application/pdf` |
+| Video | `video/mp4`, `video/webm`, `video/ogg` |
+| Testo | `text/plain`, `text/csv`, `text/markdown`, `application/json` (serviti sempre come `text/plain`) |
+
+Tutto il resto resta solo scaricabile. Restano **fuori di proposito** `image/svg+xml` e `text/html`, perché eseguirebbero script sul dominio del servizio. Le risposte inline hanno `nosniff` e `Content-Security-Policy: default-src 'none'; sandbox` (tranne i PDF, che non funzionano in un documento sandboxed), supportano `Range` per far funzionare i video in Safari e non contano come download.
+
+L'anteprima è **disattivata** per i file protetti da password (un `<img>` non può inviare la password) e per quelli con `max_downloads` (mostrare il contenuto equivale a scaricarlo). In entrambi i casi `preview_url` è `null` e `/preview` risponde `404`. Il testo mostra al massimo i primi 64 KB.
+
 ### Errori
 
 ```json
@@ -115,9 +147,9 @@ La password si passa nell'header `X-File-Password`, mai nell'URL.
 | 400 | Richiesta non valida o file mancante |
 | 401 / 403 | Password richiesta / errata, oppure token di eliminazione non valido |
 | 404 | Codice inesistente |
-| 410 | File scaduto |
+| 410 | File scaduto o con i download esauriti |
 | 413 | File sopra il limite |
-| 422 | Parametri non validi (scadenza, password, file vuoto) |
+| 422 | Parametri non validi (scadenza, password, `max_downloads`, file vuoto) |
 
 ## Struttura del progetto
 
@@ -126,6 +158,7 @@ bin/cleanup.php        pulizia dei file scaduti (cron)
 public/                unica cartella esposta dal web server
   index.php            front controller
   assets/              CSS e JavaScript
+    vendor/qrcode.js   qrcode-generator (MIT), aggiornabile con `npm run vendor`
 src/
   App.php              bootstrap e rotte
   Controller/          ApiController, WebController
@@ -133,14 +166,14 @@ src/
   Model/               StoredFile
   Repository/          FileRepository (SQLite)
   Service/             FileService, CodeGenerator
-  Support/             Config, Database, View
+  Support/             Config, Database, Preview (whitelist MIME), View
 views/                 template PHP
 storage/               database e file caricati (non versionati)
 ```
 
 ## Scadenza e pulizia
 
-Un file scaduto non è più scaricabile: la prima richiesta lo elimina e risponde `410`. In più, ogni upload ha una piccola probabilità (`CLEANUP_PROBABILITY`) di ripulire tutti i file scaduti. In produzione aggiungi un cron:
+Un file scaduto non è più scaricabile: la prima richiesta lo elimina e risponde `410`. Lo stesso vale per i file con i download esauriti, che di norma sono già stati eliminati dall'ultimo download; il cron raccoglie quelli rimasti in sospeso. In più, ogni upload ha una piccola probabilità (`CLEANUP_PROBABILITY`) di ripulire tutti i file scaduti. In produzione aggiungi un cron:
 
 ```cron
 */15 * * * * php /percorso/file-drop/bin/cleanup.php
@@ -166,7 +199,7 @@ Con Apache basta puntare il VirtualHost su `public/`: c'è già un `.htaccess`.
 
 ## Sicurezza
 
-- I file sono salvati fuori da `public/` con nomi casuali e serviti sempre come allegato, con `X-Content-Type-Options: nosniff`.
+- I file sono salvati fuori da `public/` con nomi casuali e serviti come allegato, con `X-Content-Type-Options: nosniff`. Fanno eccezione le anteprime, solo per i MIME in whitelist (vedi sopra).
 - Le password e i token di eliminazione sono salvati solo come hash.
 - Il codice usa `random_int()`, quindi non è prevedibile.
 - Non c'è rate limiting: se esponi il servizio su internet, aggiungilo a livello di web server o proxy.

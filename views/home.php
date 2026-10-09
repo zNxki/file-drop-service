@@ -1,7 +1,8 @@
 <section class="intro">
     <h1>Un file, un codice.</h1>
     <p>Carica un file e condividi il codice a cinque caratteri. Dimensione massima
-        <?= $this->e($this->bytes($maxSize)) ?>.</p>
+        <?= $this->e($this->bytes($maxSize)) ?>.
+    </p>
 </section>
 
 <form id="upload-form" class="card" data-max-size="<?= (int) $maxSize ?>" novalidate>
@@ -17,7 +18,8 @@
             <select name="expires_in">
                 <?php foreach ($options as $seconds => $label): ?>
                     <option value="<?= (int) $seconds ?>" <?= $seconds === $defaultExpiry ? ' selected' : '' ?>>
-                        <?= $this->e($label) ?></option>
+                        <?= $this->e($label) ?>
+                    </option>
                 <?php endforeach; ?>
             </select>
         </label>
@@ -25,6 +27,13 @@
             <span>Password (facoltativa)</span>
             <input type="password" name="password" minlength="4" maxlength="200" autocomplete="new-password"
                 placeholder="Nessuna">
+        </label>
+        <label class="field wide">
+            <span>Download consentiti (facoltativo)</span>
+            <input type="number" name="max_downloads" min="1" max="<?= (int) $maxDownloads ?>" step="1"
+                inputmode="numeric" placeholder="Illimitati">
+            <small class="hint">Dopo l'ultimo download il file si elimina da solo. Metti 1 per un link usa e
+                getta.</small>
         </label>
     </div>
 
@@ -64,8 +73,8 @@
 
 <details class="api">
     <summary>Usa l'API</summary>
-    <pre><code># Carica un file (scadenza in secondi, password facoltativa)
-curl -F file=@foto.jpg -F expires_in=3600 -F password=segreto <?= $this->e($baseUrl) ?>/api/files
+    <pre><code># Carica un file (scadenza in secondi, password e limite di download facoltativi)
+curl -F file=@foto.jpg -F expires_in=3600 -F password=segreto -F max_downloads=1 <?= $this->e($baseUrl) ?>/api/files
 
 # Informazioni sul file
 curl <?= $this->e($baseUrl) ?>/api/files/8Kf2a

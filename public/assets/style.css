@@ -154,6 +154,14 @@ h1 {
   color: var(--slate);
   font-weight: 500;
 }
+.field.wide {
+  grid-column: 1 / -1;
+}
+.hint {
+  color: var(--slate);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
 input,
 select {
   width: 100%;
@@ -334,6 +342,85 @@ summary:focus-visible {
 .unlock {
   display: grid;
   gap: 0.75rem;
+}
+
+.share-qr {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+  color: var(--slate);
+}
+.share-qr p {
+  margin: 0;
+}
+.share-qr strong {
+  color: var(--ink);
+}
+/* Il QR resta nero su bianco anche nel tema scuro, altrimenti molti lettori non lo leggono */
+.qr {
+  flex: none;
+  width: 8.5rem;
+  line-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+@media (max-width: 26rem) {
+  .share-qr {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+.preview {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.preview img,
+.preview video {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  height: auto;
+  border-radius: 8px;
+}
+.preview video {
+  width: 100%;
+  background: #000;
+}
+.preview-text {
+  width: 100%;
+  max-height: 24rem;
+  margin: 0;
+  padding: 0.9rem;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: 0.8rem/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.preview-note {
+  margin: 0;
+  color: var(--slate);
+  font-size: 0.85rem;
 }
 
 .notice {

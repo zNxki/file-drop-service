@@ -35,6 +35,17 @@ final class Database
             CREATE INDEX IF NOT EXISTS idx_files_expires ON files (expires_at);
         SQL);
 
+        $columns = array_column($pdo->query('PRAGMA table_info(files)')->fetchAll(), 'name');
+        if (!in_array('max_downloads', $columns, true)) {
+            try {
+                $pdo->exec('ALTER TABLE files ADD COLUMN max_downloads INTEGER');
+            } catch (\PDOException $e) {
+                if (!str_contains($e->getMessage(), 'duplicate column')) {
+                    throw $e;
+                }
+            }
+        }
+
         return $pdo;
     }
 }

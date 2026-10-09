@@ -22,10 +22,19 @@ final class ApiController extends Controller
         }
         $password = $request->post['password'] ?? null;
 
+        $maxDownloads = $request->post['max_downloads'] ?? null;
+        if ($maxDownloads === '') { // il modulo web invia il campo vuoto = nessun limite
+            $maxDownloads = null;
+        }
+        if ($maxDownloads !== null && (!is_scalar($maxDownloads) || !ctype_digit((string) $maxDownloads))) {
+            throw new HttpException(422, '"max_downloads" deve essere un numero intero positivo.');
+        }
+
         $result = $this->files->upload(
             is_array($request->files['file'] ?? null) ? $request->files['file'] : null,
             $ttl === null ? null : (int) $ttl,
             is_string($password) ? $password : null,
+            $maxDownloads === null ? null : (int) $maxDownloads,
         );
         $this->files->maybePurge();
 
@@ -45,10 +54,15 @@ final class ApiController extends Controller
     {
         $file = $this->files->get($params['code']);
         $this->files->checkPassword($file, $request->header('X-File-Password'));
-        $path = $this->files->path($file);
-        $this->files->recordDownload($file);
+        $handle = $this->files->openDownload($file);
 
-        return Response::file($path, $file->originalName, $file->mimeType, $file->size);
+        return Response::download(
+            $handle,
+            $file->originalName,
+            $file->mimeType,
+            $file->size,
+            fn() => $this->files->completeDownload($file->code),
+        );
     }
 
     public function delete(Request $request, array $params): Response

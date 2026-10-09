@@ -33,6 +33,7 @@ final class App
         $router = new Router();
         $router->add('GET', '/', $web->home(...));
         $router->add('GET', '/d/{code}', $web->show(...));
+        $router->add('GET', '/d/{code}/preview', $web->preview(...));
         $router->add('GET', '/d/{code}/download', $web->download(...));
         $router->add('POST', '/d/{code}/download', $web->download(...));
 
