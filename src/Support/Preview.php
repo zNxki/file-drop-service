@@ -12,6 +12,8 @@ final class Preview
         'image/webp' => 'image',
         'image/avif' => 'image',
         'application/pdf' => 'pdf',
+        'application/zip' => 'zip',
+        'application/x-zip-compressed' => 'zip',
         'video/mp4' => 'video',
         'video/webm' => 'video',
         'video/ogg' => 'video',

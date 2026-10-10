@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace FileDrop\Repository;
 
 use FileDrop\Model\StoredFile;
+use FileDrop\Model\StoredItem;
 use PDO;
 use PDOException;
 
@@ -21,14 +22,14 @@ final class FileRepository
     {
     }
 
-    public function insert(StoredFile $f): bool
+    public function insert(StoredFile $f, array $items = []): bool
     {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO files (code, original_name, stored_name, mime_type, size, password_hash, delete_token_hash, downloads, max_downloads, created_at, expires_at, encrypted)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)'
-        );
+        $this->pdo->beginTransaction();
         try {
-            $stmt->execute([
+            $this->pdo->prepare(
+                'INSERT INTO files (code, original_name, stored_name, mime_type, size, password_hash, delete_token_hash, downloads, max_downloads, created_at, expires_at, encrypted, item_count)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)'
+            )->execute([
                 $f->code,
                 $f->originalName,
                 $f->storedName,
@@ -40,14 +41,35 @@ final class FileRepository
                 $f->createdAt,
                 $f->expiresAt,
                 $f->encrypted ? 1 : 0,
+                $f->itemCount,
             ]);
+
+            if ($items !== []) {
+                $stmt = $this->pdo->prepare(
+                    'INSERT INTO file_items (code, position, original_name, stored_name, mime_type, size, crc32)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)'
+                );
+                foreach ($items as $item) {
+                    $stmt->execute([$f->code, $item->position, $item->originalName, $item->storedName, $item->mimeType, $item->size, $item->crc32]);
+                }
+            }
+
+            $this->pdo->commit();
             return true;
         } catch (PDOException $e) {
+            $this->pdo->rollBack();
             if (($e->errorInfo[1] ?? null) === 19) { // SQLITE_CONSTRAINT
                 return false;
             }
             throw $e;
         }
+    }
+
+    public function items(string $code): array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM file_items WHERE code = ? ORDER BY position');
+        $stmt->execute([$code]);
+        return array_map(StoredItem::fromRow(...), $stmt->fetchAll());
     }
 
     public function find(string $code): ?StoredFile
@@ -60,7 +82,15 @@ final class FileRepository
 
     public function delete(string $code): void
     {
-        $this->pdo->prepare('DELETE FROM files WHERE code = ?')->execute([$code]);
+        $this->pdo->beginTransaction();
+        try {
+            $this->pdo->prepare('DELETE FROM file_items WHERE code = ?')->execute([$code]);
+            $this->pdo->prepare('DELETE FROM files WHERE code = ?')->execute([$code]);
+            $this->pdo->commit();
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
     }
 
     public function claimDownload(string $code): bool

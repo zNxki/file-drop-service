@@ -8,7 +8,7 @@ use FileDrop\Controller\{AdminController, ApiController, WebController};
 use FileDrop\Exception\HttpException;
 use FileDrop\Http\{Request, Response, Router};
 use FileDrop\Repository\{FileRepository, LoginAttemptRepository, StatsRepository};
-use FileDrop\Service\{CodeGenerator, FileService};
+use FileDrop\Service\{ChunkService, CodeGenerator, FileService};
 use FileDrop\Support\{AdminSession, Config, Database, View};
 
 final class App
@@ -16,8 +16,10 @@ final class App
     private function __construct(
         public readonly Config $config,
         public readonly FileService $files,
+        public readonly ChunkService $chunks,
         private readonly Router $router,
         private readonly WebController $web,
+        private readonly View $view,
     ) {
     }
 
@@ -29,9 +31,10 @@ final class App
         $pdo = Database::connect($config->dbPath);
         $stats = new StatsRepository($pdo);
         $files = new FileService($config, new FileRepository($pdo), new CodeGenerator(), $stats);
+        $chunks = new ChunkService($config, $files);
         $view = new View($root . '/views');
         $web = new WebController($files, $config, $view);
-        $api = new ApiController($files, $config);
+        $api = new ApiController($files, $config, $chunks);
         $admin = new AdminController($files, $config, $stats, new LoginAttemptRepository($pdo), new AdminSession($config->storagePath . '/sessions'), $view);
 
         $router = new Router();
@@ -49,16 +52,22 @@ final class App
         $router->add('POST', '/admin/files/{code}/delete', $admin->delete(...));
 
         $router->add('POST', '/api/files', $api->upload(...));
+        $router->add('POST', '/api/uploads', $api->initUpload(...));
+        $router->add('GET', '/api/uploads/{id}', $api->uploadStatus(...));
+        $router->add('PUT', '/api/uploads/{id}', $api->uploadChunk(...));
+        $router->add('POST', '/api/uploads/{id}/complete', $api->completeUpload(...));
+        $router->add('DELETE', '/api/uploads/{id}', $api->discardUpload(...));
         $router->add('GET', '/api/files/{code}', $api->info(...));
         $router->add('GET', '/api/files/{code}/download', $api->download(...));
         $router->add('DELETE', '/api/files/{code}', $api->delete(...));
 
-        return new self($config, $files, $router, $web);
+        return new self($config, $files, $chunks, $router, $web, $view);
     }
 
     public function run(): void
     {
         $request = Request::fromGlobals();
+        $this->view->fragment($request->header('X-Fd-Nav') !== null && !$request->isApi());
 
         try {
             $response = $this->router->dispatch($request);

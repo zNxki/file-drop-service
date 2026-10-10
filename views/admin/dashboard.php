@@ -54,6 +54,7 @@ $segments = [
 
 <section class="stats" aria-label="Riepilogo">
     <div class="card stat">
+        <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg></span>
         <span class="stat-label">File attivi</span>
         <strong class="stat-value"><?= $this->number($activeFiles) ?></strong>
         <span class="stat-note">
@@ -65,6 +66,7 @@ $segments = [
         </span>
     </div>
     <div class="card stat">
+        <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" /><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></svg></span>
         <span class="stat-label">Spazio usato</span>
         <strong class="stat-value"><?= $this->e($this->bytes($disk['bytes'])) ?></strong>
         <span class="stat-note">
@@ -76,13 +78,16 @@ $segments = [
         </span>
     </div>
     <div class="card stat">
+        <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v11" /><path d="m7 11 5 5 5-5" /><path d="M5 20h14" /></svg></span>
         <span class="stat-label">Download totali</span>
         <strong class="stat-value"><?= $this->number($totals['downloads']) ?></strong>
         <span class="stat-note"><?= $this->number($downloads['day']) ?> nelle ultime 24 ore</span>
     </div>
     <div class="card stat">
+        <span class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg></span>
         <span class="stat-label">Ultimi 7 / 30 giorni</span>
-        <strong class="stat-value"><?= $this->number($downloads['week']) ?> / <?= $this->number($downloads['month']) ?></strong>
+        <strong class="stat-value"><?= $this->number($downloads['week']) ?> /
+            <?= $this->number($downloads['month']) ?></strong>
         <span class="stat-note">
             <?php if ($downloads['since'] !== null): ?>
                 Registro dal <?= $this->time($downloads['since']) ?>
@@ -97,22 +102,27 @@ $segments = [
     <h2>Occupazione dello spazio</h2>
     <svg class="usage" viewBox="0 0 100 4" preserveAspectRatio="none" role="img"
         aria-label="Ripartizione dello spazio occupato">
-        <?php $x = 0.0; foreach ($segments as $name => $bytes):
+        <?php $x = 0.0;
+        foreach ($segments as $name => $bytes):
             $w = $bytes / $sumBase * 100; ?>
             <rect class="seg seg-<?= $name ?>" x="<?= round($x, 3) ?>" y="0" width="<?= round($w, 3) ?>" height="4"></rect>
             <?php $x += $w; endforeach; ?>
     </svg>
     <ul class="legend">
-        <li><span class="swatch seg-active"></span>File attivi <strong><?= $this->e($this->bytes($usage['active'])) ?></strong></li>
-        <li><span class="swatch seg-stale"></span>Scaduti o esauriti <strong><?= $this->e($this->bytes($usage['stale'])) ?></strong></li>
-        <li><span class="swatch seg-other"></span>Orfani su disco <strong><?= $this->e($this->bytes($usage['other'])) ?></strong></li>
+        <li><span class="swatch seg-active"></span>File attivi
+            <strong><?= $this->e($this->bytes($usage['active'])) ?></strong></li>
+        <li><span class="swatch seg-stale"></span>Scaduti o esauriti
+            <strong><?= $this->e($this->bytes($usage['stale'])) ?></strong></li>
+        <li><span class="swatch seg-other"></span>Orfani su disco
+            <strong><?= $this->e($this->bytes($usage['other'])) ?></strong></li>
     </ul>
     <form method="post" action="/admin/cleanup" class="inline-form">
         <input type="hidden" name="csrf" value="<?= $this->e($csrf) ?>">
         <?php foreach ($state as $key => $value): ?>
             <input type="hidden" name="<?= $this->e($key) ?>" value="<?= $this->e($value) ?>">
         <?php endforeach; ?>
-        <button class="btn btn-small" type="submit" <?= $totals['stale'] === 0 ? 'disabled' : '' ?>>Elimina scaduti ed esauriti</button>
+        <button class="btn btn-small" type="submit" <?= $totals['stale'] === 0 ? 'disabled' : '' ?>>Elimina scaduti ed
+            esauriti</button>
     </form>
 </section>
 
@@ -120,9 +130,11 @@ $segments = [
     <h2>Download negli ultimi <?= count($perDay) ?> giorni</h2>
     <svg class="chart" viewBox="0 0 <?= $chartWidth ?> 80" preserveAspectRatio="none" role="img"
         aria-label="Download giornalieri">
-        <?php $i = 0; foreach ($perDay as $day => $n):
+        <?php $i = 0;
+        foreach ($perDay as $day => $n):
             $h = $n === 0 ? 1 : max(2, (int) round($n / $chartMax * 76)); ?>
-            <rect class="chart-bar<?= $n === 0 ? ' is-zero' : '' ?>" x="<?= $i * 10 + 1 ?>" y="<?= 80 - $h ?>" width="8" height="<?= $h ?>">
+            <rect class="chart-bar<?= $n === 0 ? ' is-zero' : '' ?>" x="<?= $i * 10 + 1 ?>" y="<?= 80 - $h ?>" width="8"
+                height="<?= $h ?>">
                 <title><?= $this->e($day) ?>: <?= $this->number($n) ?></title>
             </rect>
             <?php $i++; endforeach; ?>
@@ -176,7 +188,8 @@ $segments = [
     <form class="search" method="get" action="/admin">
         <input type="hidden" name="sort" value="<?= $this->e($sort) ?>">
         <input type="hidden" name="dir" value="<?= $ascending ? 'asc' : 'desc' ?>">
-        <input type="search" name="q" value="<?= $this->e($q) ?>" maxlength="100" placeholder="Cerca per nome o codice" aria-label="Cerca">
+        <input type="search" name="q" value="<?= $this->e($q) ?>" maxlength="100" placeholder="Cerca per nome o codice"
+            aria-label="Cerca">
         <button class="btn btn-small" type="submit">Cerca</button>
         <?php if ($q !== ''): ?>
             <a class="link" href="<?= $this->e($url(['q' => ''])) ?>">Azzera</a>
@@ -203,11 +216,13 @@ $segments = [
                 <tbody>
                     <?php foreach ($list['files'] as $file): ?>
                         <tr>
-                            <td class="cell-name"><a href="/d/<?= $this->e($file->code) ?>"><?= $this->e($file->originalName) ?></a></td>
+                            <td class="cell-name"><a
+                                    href="/d/<?= $this->e($file->code) ?>"><?= $this->e($file->originalName) ?></a></td>
                             <td><code><?= $this->e($file->code) ?></code></td>
                             <td><?= $this->e($this->bytes($file->size)) ?></td>
                             <td>
-                                <?= $this->number($file->downloads) ?><?php if ($file->maxDownloads !== null): ?> / <?= $this->number($file->maxDownloads) ?><?php endif; ?>
+                                <?= $this->number($file->downloads) ?>        <?php if ($file->maxDownloads !== null): ?> /
+                                    <?= $this->number($file->maxDownloads) ?>        <?php endif; ?>
                             </td>
                             <td><?= $this->time($file->createdAt) ?></td>
                             <td><?= $this->time($file->expiresAt) ?></td>
@@ -224,6 +239,9 @@ $segments = [
                                 <?php endif; ?>
                                 <?php if ($file->encrypted): ?>
                                     <span class="badge">Cifrato</span>
+                                <?php endif; ?>
+                                <?php if ($file->isBundle()): ?>
+                                    <span class="badge"><?= (int) $file->itemCount ?> file</span>
                                 <?php endif; ?>
                             </td>
                             <td>

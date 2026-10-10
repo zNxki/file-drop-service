@@ -49,22 +49,32 @@ final class Database
                 attempted_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_login_attempts ON login_attempts (ip, attempted_at);
+
+            CREATE TABLE IF NOT EXISTS file_items (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                code          TEXT NOT NULL,
+                position      INTEGER NOT NULL,
+                original_name TEXT NOT NULL,
+                stored_name   TEXT NOT NULL UNIQUE,
+                mime_type     TEXT NOT NULL,
+                size          INTEGER NOT NULL,
+                crc32         INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_file_items_code ON file_items (code, position);
         SQL);
 
         $columns = array_column($pdo->query('PRAGMA table_info(files)')->fetchAll(), 'name');
-        if (!in_array('max_downloads', $columns, true)) {
-            try {
-                $pdo->exec('ALTER TABLE files ADD COLUMN max_downloads INTEGER');
-            } catch (\PDOException $e) {
-                if (!str_contains($e->getMessage(), 'duplicate column')) {
-                    throw $e;
-                }
+        $migrations = [
+            'max_downloads' => 'INTEGER',
+            'encrypted' => 'INTEGER NOT NULL DEFAULT 0',
+            'item_count' => 'INTEGER NOT NULL DEFAULT 1',
+        ];
+        foreach ($migrations as $column => $definition) {
+            if (in_array($column, $columns, true)) {
+                continue;
             }
-        }
-
-        if (!in_array('encrypted', $columns, true)) {
             try {
-                $pdo->exec('ALTER TABLE files ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0');
+                $pdo->exec("ALTER TABLE files ADD COLUMN $column $definition");
             } catch (\PDOException $e) {
                 if (!str_contains($e->getMessage(), 'duplicate column')) {
                     throw $e;

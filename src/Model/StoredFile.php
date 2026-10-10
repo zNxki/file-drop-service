@@ -20,6 +20,7 @@ final readonly class StoredFile
         public int $expiresAt,
         public ?int $maxDownloads = null,
         public bool $encrypted = false,
+        public int $itemCount = 1,
     ) {
     }
 
@@ -38,7 +39,13 @@ final readonly class StoredFile
             (int) $r['expires_at'],
             $r['max_downloads'] === null ? null : (int) $r['max_downloads'],
             !empty($r['encrypted']),
+            max(1, (int) ($r['item_count'] ?? 1)),
         );
+    }
+
+    public function isBundle(): bool
+    {
+        return $this->itemCount > 1;
     }
 
     public function isProtected(): bool
@@ -63,12 +70,15 @@ final readonly class StoredFile
 
     public function displayName(): string
     {
+        if ($this->isBundle()) {
+            return $this->itemCount . ' file';
+        }
         return $this->encrypted ? 'File cifrato' : $this->originalName;
     }
 
     public function previewKind(): ?string
     {
-        if ($this->encrypted || $this->isProtected() || $this->maxDownloads !== null) {
+        if ($this->isBundle() || $this->encrypted || $this->isProtected() || $this->maxDownloads !== null) {
             return null;
         }
         return Preview::kind($this->mimeType);
@@ -83,6 +93,7 @@ final readonly class StoredFile
             'mime_type' => $this->mimeType,
             'protected' => $this->isProtected(),
             'encrypted' => $this->encrypted,
+            'item_count' => $this->itemCount,
             'downloads' => $this->downloads,
             'max_downloads' => $this->maxDownloads,
             'remaining_downloads' => $this->remainingDownloads(),

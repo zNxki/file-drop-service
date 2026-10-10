@@ -18,6 +18,7 @@ final readonly class Config
         public string $storagePath,
         public float $cleanupProbability,
         public string $adminPasswordHash = '',
+        public int $maxFiles = 20,
     ) {
     }
 
@@ -50,6 +51,7 @@ final readonly class Config
             storagePath: rtrim($path($env('STORAGE_PATH', 'storage')), '/\\'),
             cleanupProbability: min(1.0, max(0.0, (float) $env('CLEANUP_PROBABILITY', '0.02'))),
             adminPasswordHash: $env('ADMIN_PASSWORD_HASH'),
+            maxFiles: min(100, max(1, (int) $env('MAX_FILES', '20'))),
         );
     }
 }

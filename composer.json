@@ -17,7 +17,7 @@
     "scripts": {
         "serve": [
             "Composer\\Config::disableProcessTimeout",
-            "@php -d upload_max_filesize=512M -d post_max_size=520M -d memory_limit=256M -S localhost:8000 -t public public/index.php"
+            "@php -d upload_max_filesize=512M -d post_max_size=520M -d max_file_uploads=50 -d memory_limit=256M -S localhost:8000 -t public public/index.php"
         ],
         "cleanup": "@php bin/cleanup.php",
         "post-create-project-cmd": [

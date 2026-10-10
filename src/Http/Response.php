@@ -13,6 +13,7 @@ final class Response
         private readonly int $offset = 0,
         private readonly int $length = 0,
         private readonly ?\Closure $onSent = null,
+        private readonly ?\Traversable $chunks = null,
     ) {
     }
 
@@ -30,6 +31,7 @@ final class Response
         return new self($status, $headers + [
             'Content-Type' => 'text/html; charset=utf-8',
             'Cache-Control' => 'no-store',
+            'Vary' => 'X-Fd-Nav',
             'Content-Security-Policy' => "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
             'Permissions-Policy' => 'camera=(), microphone=(), geolocation=(), payment=()',
             'Cross-Origin-Opener-Policy' => 'same-origin',
@@ -50,6 +52,17 @@ final class Response
             'Accept-Ranges' => 'none',
             'Cache-Control' => 'private, no-store',
         ], null, $handle, 0, $size, $onSent);
+    }
+
+    public static function downloadChunks(\Traversable $chunks, string $name, string $mime, int $size, ?\Closure $onSent = null): self
+    {
+        return new self(200, [
+            'Content-Type' => $mime,
+            'Content-Length' => (string) $size,
+            'Content-Disposition' => self::disposition('attachment', $name),
+            'Accept-Ranges' => 'none',
+            'Cache-Control' => 'private, no-store',
+        ], null, null, 0, $size, $onSent, $chunks);
     }
 
     public static function inline($handle, string $name, string $mime, int $size, ?string $range = null, array $extra = []): self
@@ -115,11 +128,40 @@ final class Response
             header($name . ': ' . $value);
         }
 
+        if ($this->chunks !== null) {
+            $this->streamChunks();
+            return;
+        }
         if ($this->stream !== null) {
             $this->stream();
             return;
         }
         echo $this->body;
+    }
+
+    private function streamChunks(): void
+    {
+        ignore_user_abort(true);
+        @set_time_limit(0);
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        try {
+            foreach ($this->chunks as $chunk) {
+                if (connection_aborted()) {
+                    break;
+                }
+                echo $chunk;
+                flush();
+            }
+        } catch (\Throwable $e) {
+            error_log((string) $e);
+        } finally {
+            if ($this->onSent !== null) {
+                ($this->onSent)();
+            }
+        }
     }
 
     private function stream(): void

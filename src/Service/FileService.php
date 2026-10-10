@@ -8,6 +8,8 @@ use FileDrop\Repository\FileRepository;
 use FileDrop\Repository\StatsRepository;
 use FileDrop\Support\Config;
 use FileDrop\Model\StoredFile;
+use FileDrop\Model\StoredItem;
+use FileDrop\Support\ZipStream;
 
 final class FileService
 {
@@ -23,7 +25,22 @@ final class FileService
     ) {
     }
 
-    public function upload(?array $upload, ?int $ttl, ?string $password, ?int $maxDownloads = null, bool $encrypted = false): array
+    public function maxFiles(): int
+    {
+        $php = (int) ini_get('max_file_uploads');
+        return $php > 0 ? max(1, min($this->config->maxFiles, $php - 1)) : $this->config->maxFiles;
+    }
+
+    public function sizeLimit(int $count, bool $encrypted): int
+    {
+        $maxSize = $this->config->maxFileSize;
+        if ($count > 1) {
+            return min($maxSize, ZipStream::MAX_BYTES);
+        }
+        return $encrypted ? $maxSize + intdiv($maxSize, 65536) + 4096 : $maxSize;
+    }
+
+    public function upload(array $uploads, ?int $ttl, ?string $password, ?int $maxDownloads = null, bool $encrypted = false): array
     {
         $ttl ??= $this->config->defaultExpiry;
         if ($ttl < 60 || $ttl > $this->config->maxExpiry) {
@@ -42,30 +59,36 @@ final class FileService
             throw new HttpException(422, sprintf('Il numero di download deve essere tra 1 e %d.', self::MAX_DOWNLOADS));
         }
 
-        if ($upload === null || !isset($upload['error']) || is_array($upload['error'])) {
-            throw new HttpException(400, 'Nessun file ricevuto: invia un solo file nel campo "file".');
+        $uploads = array_values($uploads);
+        $count = count($uploads);
+        if ($count === 0) {
+            throw new HttpException(400, 'Nessun file ricevuto: invia i file nel campo "file" (per più file usa "file[]").');
+        }
+        if ($count > $this->maxFiles()) {
+            throw new HttpException(422, sprintf(
+                'Puoi caricare al massimo %d file alla volta (se ne hai inviati di più, alcuni potrebbero essere stati scartati dal server).',
+                $this->maxFiles()
+            ));
+        }
+        if ($encrypted && $count > 1) {
+            throw new HttpException(422, 'I file cifrati vanno inviati come un unico archivio: crea lo zip nel browser prima di cifrare.');
         }
 
-        $limit = $this->formatBytes($this->config->maxFileSize);
-        match ($upload['error']) {
-            UPLOAD_ERR_OK => null,
-            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => throw new HttpException(413, "Il file supera il limite consentito ($limit)."),
-            UPLOAD_ERR_NO_FILE => throw new HttpException(400, 'Nessun file ricevuto.'),
-            default => throw new HttpException(500, 'Caricamento non riuscito, riprova.'),
-        };
+        $multiple = $count > 1;
+        $maxSize = $this->sizeLimit($count, $encrypted);
+        $limit = $this->formatBytes($multiple ? $maxSize : $this->config->maxFileSize);
 
-        $size = (int) $upload['size'];
-        if ($size <= 0) {
-            throw new HttpException(422, 'Il file è vuoto.');
+        $sizes = [];
+        foreach ($uploads as $upload) {
+            $sizes[] = $this->checkUpload($upload, $limit, $multiple);
         }
-        $maxSize = $this->config->maxFileSize;
-        if ($encrypted) {
-            $maxSize += intdiv($maxSize, 65536) + 4096;
+        $total = array_sum($sizes);
+        if ($total > $maxSize) {
+            throw new HttpException(413, $multiple
+                ? "Il totale dei file supera il limite consentito ($limit)."
+                : "Il file supera il limite consentito ($limit).");
         }
-        if ($size > $maxSize) {
-            throw new HttpException(413, "Il file supera il limite consentito ($limit).");
-        }
-        if ($encrypted && !$this->hasEncryptionHeader((string) $upload['tmp_name'])) {
+        if ($encrypted && !$this->hasEncryptionHeader((string) $uploads[0]['tmp_name'])) {
             throw new HttpException(422, 'Il file non è nel formato cifrato previsto.');
         }
 
@@ -73,26 +96,52 @@ final class FileService
         if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) {
             throw new HttpException(500, 'Cartella di archiviazione non scrivibile.');
         }
-        $storedName = bin2hex(random_bytes(16));
-        $target = $dir . '/' . $storedName;
-        if (!move_uploaded_file($upload['tmp_name'], $target)) {
-            throw new HttpException(500, 'Impossibile salvare il file.');
-        }
 
-        @chmod($target, 0640);
+        $moved = [];
+        $items = [];
+        $taken = [];
+        try {
+            foreach ($uploads as $i => $upload) {
+                $storedName = bin2hex(random_bytes(16));
+                $target = $dir . '/' . $storedName;
+                $stored = !empty($upload['chunked'])
+                    ? @rename((string) $upload['tmp_name'], $target)
+                    : move_uploaded_file($upload['tmp_name'], $target);
+                if (!$stored) {
+                    throw new HttpException(500, 'Impossibile salvare il file.');
+                }
+                @chmod($target, 0640);
+                $moved[] = $target;
+
+                $items[] = new StoredItem(
+                    $i,
+                    $encrypted ? 'encrypted.bin' : $this->uniqueName($this->sanitizeName((string) ($upload['name'] ?? '')), $taken),
+                    $storedName,
+                    $encrypted ? 'application/octet-stream' : $this->detectMime($target),
+                    $sizes[$i],
+                    $multiple ? $this->crc32($target) : 0,
+                );
+            }
+        } catch (\Throwable $e) {
+            foreach ($moved as $path) {
+                @unlink($path);
+            }
+            throw $e;
+        }
 
         $now = time();
         $deleteToken = bin2hex(random_bytes(16));
-        $name = $encrypted ? 'encrypted.bin' : $this->sanitizeName((string) ($upload['name'] ?? ''));
+        $bundleStoredName = 'bundle-' . bin2hex(random_bytes(12));
 
         for ($attempt = 0; $attempt < 10; $attempt++) {
             $code = $this->codes->generate($this->config->codeLength + intdiv($attempt, 5));
+            $first = $items[0];
             $file = new StoredFile(
                 $code,
-                $name,
-                $storedName,
-                $encrypted ? 'application/octet-stream' : $this->detectMime($target),
-                $size,
+                $multiple ? "file-drop-$code.zip" : $first->originalName,
+                $multiple ? $bundleStoredName : $first->storedName,
+                $multiple ? 'application/zip' : $first->mimeType,
+                $total,
                 $password === null ? null : password_hash($password, PASSWORD_DEFAULT),
                 hash('sha256', $deleteToken),
                 0,
@@ -100,14 +149,22 @@ final class FileService
                 $now + $ttl,
                 $maxDownloads,
                 $encrypted,
+                $count,
             );
-            if ($this->repository->insert($file)) {
-                return ['file' => $file, 'deleteToken' => $deleteToken];
+            if ($this->repository->insert($file, $multiple ? $items : [])) {
+                return ['file' => $file, 'deleteToken' => $deleteToken, 'items' => $multiple ? $items : []];
             }
         }
 
-        @unlink($target);
+        foreach ($moved as $path) {
+            @unlink($path);
+        }
         throw new HttpException(500, 'Impossibile generare un codice univoco.');
+    }
+
+    public function items(StoredFile $file): array
+    {
+        return $file->isBundle() ? $this->repository->items($file->code) : [];
     }
 
     public function get(string $code): StoredFile
@@ -135,7 +192,7 @@ final class FileService
             throw new HttpException(401, 'Questo file è protetto da password.');
         }
         if (!password_verify($password, (string) $file->passwordHash)) {
-            usleep(300_000); // rallenta i tentativi a raffica
+            usleep(300_000);
             throw new HttpException(403, 'Password errata.');
         }
     }
@@ -159,6 +216,52 @@ final class FileService
         }
         $this->logDownload($file);
         return $handle;
+    }
+
+    public function openBundleDownload(StoredFile $file): ZipStream
+    {
+        $items = $this->repository->items($file->code);
+        if ($items === [] || count($items) !== $file->itemCount) {
+            $this->remove($file);
+            throw new HttpException(404, 'Il file non è più disponibile.');
+        }
+
+        $entries = [];
+        $close = static function () use (&$entries): void {
+            foreach ($entries as $entry) {
+                fclose($entry['handle']);
+            }
+        };
+
+        foreach ($items as $item) {
+            $path = $this->config->storagePath . '/uploads/' . $item->storedName;
+            $handle = is_file($path) ? @fopen($path, 'rb') : false;
+            if ($handle === false) {
+                $close();
+                $this->remove($file);
+                throw new HttpException(404, 'Il file non è più disponibile.');
+            }
+            $entries[] = ['name' => $item->originalName, 'handle' => $handle, 'size' => $item->size, 'crc' => $item->crc32];
+            if ((fstat($handle)['size'] ?? -1) !== $item->size) {
+                $close();
+                throw new HttpException(500, 'Impossibile leggere il file.');
+            }
+        }
+
+        try {
+            $zip = new ZipStream($entries, $file->createdAt);
+        } catch (\LengthException $e) {
+            $close();
+            throw new HttpException(500, 'Impossibile creare l\'archivio.');
+        }
+
+        if (!$this->repository->claimDownload($file->code)) {
+            $close();
+            throw new HttpException(410, 'Il file ha raggiunto il numero massimo di download.');
+        }
+        $this->logDownload($file);
+
+        return $zip;
     }
 
     public function completeDownload(string $code): void
@@ -261,6 +364,9 @@ final class FileService
 
     private function openHandle(StoredFile $file)
     {
+        if ($file->isBundle()) {
+            throw new HttpException(404, 'Anteprima non disponibile per questo file.');
+        }
         $handle = @fopen($this->path($file), 'rb');
         if ($handle === false) {
             throw new HttpException(500, 'Impossibile leggere il file.');
@@ -270,8 +376,59 @@ final class FileService
 
     private function remove(StoredFile $file): void
     {
-        @unlink($this->config->storagePath . '/uploads/' . $file->storedName);
+        if ($file->isBundle()) {
+            foreach ($this->repository->items($file->code) as $item) {
+                @unlink($this->config->storagePath . '/uploads/' . $item->storedName);
+            }
+        } else {
+            @unlink($this->config->storagePath . '/uploads/' . $file->storedName);
+        }
         $this->repository->delete($file->code);
+    }
+
+    private function checkUpload(array $upload, string $limit, bool $named): int
+    {
+        if (!isset($upload['error']) || is_array($upload['error'])) {
+            throw new HttpException(400, 'Nessun file ricevuto: invia i file nel campo "file" (per più file usa "file[]").');
+        }
+
+        $label = $named ? ' «' . $this->sanitizeName((string) ($upload['name'] ?? '')) . '»' : '';
+        match ($upload['error']) {
+            UPLOAD_ERR_OK => null,
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => throw new HttpException(413, "Il file$label supera il limite consentito ($limit)."),
+            UPLOAD_ERR_NO_FILE => throw new HttpException(400, 'Nessun file ricevuto.'),
+            default => throw new HttpException(500, 'Caricamento non riuscito, riprova.'),
+        };
+
+        $size = (int) $upload['size'];
+        if ($size <= 0) {
+            throw new HttpException(422, $named ? "Il file$label è vuoto." : 'Il file è vuoto.');
+        }
+        return $size;
+    }
+
+    private function uniqueName(string $name, array &$taken): string
+    {
+        $dot = strrpos($name, '.');
+        $base = ($dot === false || $dot === 0) ? $name : substr($name, 0, $dot);
+        $ext = ($dot === false || $dot === 0) ? '' : substr($name, $dot);
+
+        $candidate = $name;
+        for ($n = 2; isset($taken[mb_strtolower($candidate)]); $n++) {
+            $candidate = "$base ($n)$ext";
+        }
+        $taken[mb_strtolower($candidate)] = true;
+
+        return $candidate;
+    }
+
+    private function crc32(string $path): int
+    {
+        $hash = hash_file('crc32b', $path);
+        if ($hash === false) {
+            throw new HttpException(500, 'Impossibile leggere il file.');
+        }
+        return (int) hexdec($hash);
     }
 
     private function sanitizeName(string $name): string
@@ -306,7 +463,7 @@ final class FileService
         return 'application/octet-stream';
     }
 
-    private function formatBytes(int $bytes): string
+    public function formatBytes(int $bytes): string
     {
         return round($bytes / 1048576, 1) . ' MB';
     }

@@ -5,14 +5,48 @@ namespace FileDrop\Support;
 
 final class View
 {
+    /** Script caricati nelle pagine che hanno bisogno di upload/download. */
+    private const PAGE_SCRIPTS = [
+        '/assets/js/crypto.js',
+        '/assets/js/zip.js',
+        '/assets/js/highlight.js',
+        '/assets/js/zip-preview.js',
+        '/assets/js/app.js',
+    ];
+
+    private bool $fragment = false;
+
     public function __construct(private readonly string $dir)
     {
+    }
+
+    public function fragment(bool $on = true): void
+    {
+        $this->fragment = $on;
     }
 
     public function render(string $template, array $data = []): string
     {
         $content = $this->capture($template, $data);
-        return $this->capture('layout', $data + ['content' => $content]);
+        $scripts = !empty($data['script']) ? self::PAGE_SCRIPTS : [];
+
+        if ($this->fragment) {
+            return sprintf(
+                '<div id="fd-meta" hidden data-title="%s" data-wide="%d" data-noindex="%d" data-scripts="%s"></div>',
+                $this->e($data['title'] ?? 'File Drop'),
+                empty($data['wide']) ? 0 : 1,
+                empty($data['noindex']) ? 0 : 1,
+                $this->e(implode(' ', array_map($this->asset(...), $scripts))),
+            ) . $content;
+        }
+
+        return $this->capture('layout', $data + ['content' => $content, 'pageScripts' => $scripts]);
+    }
+
+    public function asset(string $path): string
+    {
+        $file = dirname($this->dir) . '/public' . $path;
+        return $path . (is_file($file) ? '?v=' . filemtime($file) : '');
     }
 
     public function e(mixed $value): string

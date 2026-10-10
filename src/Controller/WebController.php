@@ -38,21 +38,14 @@ final class WebController extends Controller
             'options' => $options,
             'defaultExpiry' => $this->config->defaultExpiry,
             'maxDownloads' => FileService::MAX_DOWNLOADS,
+            'maxFiles' => $this->files->maxFiles(),
             'baseUrl' => $this->baseUrl($request),
         ]));
     }
 
     public function show(Request $request, array $params): Response
     {
-        $file = $this->files->get($params['code']);
-
-        return Response::html($this->view->render('download', [
-            'title' => $file->displayName() . ' · File Drop',
-            'script' => true,
-            'file' => $file,
-            'error' => null,
-            'shareUrl' => $this->baseUrl($request) . '/d/' . $file->code,
-        ]));
+        return $this->downloadPage($request, $this->files->get($params['code']));
     }
 
     public function download(Request $request, array $params): Response
@@ -67,24 +60,10 @@ final class WebController extends Controller
         try {
             $this->files->checkPassword($file, is_string($password) ? $password : null);
         } catch (HttpException $e) {
-            return Response::html($this->view->render('download', [
-                'title' => $file->displayName() . ' · File Drop',
-                'script' => true,
-                'file' => $file,
-                'error' => $e->getMessage(),
-                'shareUrl' => $this->baseUrl($request) . '/d/' . $file->code,
-            ]), $e->status);
+            return $this->downloadPage($request, $file, $e->getMessage(), $e->status);
         }
 
-        $handle = $this->files->openDownload($file);
-
-        return Response::download(
-            $handle,
-            $file->originalName,
-            $file->mimeType,
-            $file->size,
-            fn() => $this->files->completeDownload($file->code),
-        );
+        return $this->downloadResponse($file);
     }
 
     public function preview(Request $request, array $params): Response
@@ -113,6 +92,18 @@ final class WebController extends Controller
             'status' => $e->status,
             'message' => $e->getMessage(),
         ]), $e->status);
+    }
+
+    private function downloadPage(Request $request, \FileDrop\Model\StoredFile $file, ?string $error = null, int $status = 200): Response
+    {
+        return Response::html($this->view->render('download', [
+            'title' => $file->displayName() . ' · File Drop',
+            'script' => true,
+            'file' => $file,
+            'items' => $this->files->items($file),
+            'error' => $error,
+            'shareUrl' => $this->baseUrl($request) . '/d/' . $file->code,
+        ]), $status);
     }
 
     private function humanDuration(int $seconds): string

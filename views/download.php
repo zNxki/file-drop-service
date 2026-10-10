@@ -17,6 +17,19 @@
             <?php endif; ?>
         </p>
 
+        <?php if ($file->isBundle() && $items !== []): ?>
+            <ul class="item-list" aria-label="File contenuti nell'archivio">
+                <?php foreach ($items as $item): ?>
+                    <li>
+                        <span class="item-name"><?= $this->e($item->originalName) ?></span>
+                        <span class="item-size"><?= $this->e($this->bytes($item->size)) ?></span>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+            <p class="hint">Si scaricano insieme in un unico .zip. Conta come un solo download.</p>
+        <?php endif; ?>
+        <?php $downloadLabel = $file->isBundle() ? 'Scarica tutto (.zip)' : 'Scarica'; ?>
+
         <?php if ($file->encrypted): ?>
             <form method="post" action="/d/<?= $this->e($file->code) ?>/download" class="unlock" id="decrypt-form">
                 <p class="hint">Cifrato end-to-end: il server non vede mai il contenuto. La chiave sta nel link, dopo il
@@ -45,10 +58,10 @@
                 </label>
                 <?php if ($error): ?>
                     <p class="error" role="alert"><?= $this->e($error) ?></p><?php endif; ?>
-                <button class="btn" type="submit">Scarica</button>
+                <button class="btn" type="submit"><?= $this->e($downloadLabel) ?></button>
             </form>
         <?php else: ?>
-            <a class="btn" href="/d/<?= $this->e($file->code) ?>/download">Scarica</a>
+            <a class="btn" href="/d/<?= $this->e($file->code) ?>/download"><?= $this->e($downloadLabel) ?></a>
         <?php endif; ?>
 
         <div class="share-qr" id="share-qr" data-url="<?= $this->e($shareUrl) ?>" hidden>
@@ -74,9 +87,11 @@
             <pre class="preview-text" id="preview-text" data-src="<?= $this->e($src) ?>" data-size="<?= (int) $file->size ?>"
                 hidden></pre>
             <p class="preview-note" id="preview-note" hidden>Anteprima limitata ai primi 64 KB.</p>
+        <?php elseif ($kind === 'zip'): ?>
+            <div class="zip-preview" id="zip-preview" data-src="<?= $this->e($src) ?>" data-size="<?= (int) $file->size ?>"
+                hidden></div>
         <?php else: ?>
             <a class="btn btn-small" href="<?= $this->e($src) ?>" target="_blank" rel="noopener">Apri anteprima PDF</a>
         <?php endif; ?>
     </section>
 <?php endif; ?>
-<script src="/assets/vendor/qrcode.js" defer></script>

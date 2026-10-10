@@ -10,6 +10,7 @@ File Drop è un mini servizio web in PHP: carichi un file, ottieni un codice bre
 ## Funzionalità
 
 - Upload con **barra di avanzamento**, velocità e tempo residuo (drag and drop incluso)
+- **Upload multiplo**: scegli o trascina più file, un solo codice, download come **.zip generato al volo** (nessun file temporaneo)
 - **Codice univoco** per ogni file, senza caratteri ambigui (`0 O o 1 l I`)
 - Download tramite codice: `/d/{codice}`
 - **QR code** nella pagina di download, per passare il link al telefono con la fotocamera
@@ -22,6 +23,7 @@ File Drop è un mini servizio web in PHP: carichi un file, ottieni un codice bre
 - Database **SQLite**, nessun server da installare
 - Interfaccia responsive con tema chiaro e scuro automatico
 - Nessun framework: solo PHP, PDO e `vlucas/phpdotenv`
+- **Navigazione senza ricaricare la pagina** (stile Next.js): link e form interni sostituiscono solo `<main>`, con prefetch all'hover/tocco/viewport, cache di 30 s, barra di avanzamento, pulsanti avanti/indietro con scroll ripristinato e fallback automatico alla navigazione normale
 
 ## Requisiti
 
@@ -55,8 +57,11 @@ Tutte le impostazioni sono nel file `.env`.
 | `DB_PATH` | `storage/filedrop.sqlite` | Percorso del database |
 | `STORAGE_PATH` | `storage` | Cartella dei file caricati |
 | `CLEANUP_PROBABILITY` | `0.02` | Probabilità di pulizia a ogni upload |
+| `MAX_FILES` | `20` | File accettati in un solo upload (massimo 100) |
 
 > **Limiti di PHP.** `MAX_FILE_SIZE_MB` non basta: anche `upload_max_filesize` e `post_max_size` in `php.ini` devono essere almeno uguali. Un esempio è in `public/.user.ini`.
+>
+> Con più file conta anche `max_file_uploads` (default PHP: 20), che deve restare **sopra** `MAX_FILES`. Oltre quel limite PHP scarta i file in eccesso senza dare errori, quindi l'app accetta al massimo `max_file_uploads - 1` file: una richiesta troncata viene rifiutata invece di perdere file in silenzio.
 
 ## API REST
 
@@ -68,6 +73,11 @@ Base URL: `http://localhost:8000`. Le risposte sono JSON.
 | `GET` | `/api/files/{code}` | Informazioni sul file |
 | `GET` | `/api/files/{code}/download` | Scarica il file |
 | `DELETE` | `/api/files/{code}` | Elimina il file |
+| `POST` | `/api/uploads` | Avvia un upload a blocchi (JSON: `files: [{name, size}]`, `encrypted`) |
+| `GET` | `/api/uploads/{id}` | Stato dell'upload: byte ricevuti per ogni file |
+| `PUT` | `/api/uploads/{id}?index=0&offset=N` | Invia un blocco (corpo binario) |
+| `POST` | `/api/uploads/{id}/complete` | Completa l'upload (`expires_in`, `password`, `max_downloads`) |
+| `DELETE` | `/api/uploads/{id}` | Annulla l'upload e scarta i blocchi |
 
 ### Upload
 
@@ -99,6 +109,36 @@ curl -F file=@foto.jpg -F expires_in=3600 -F password=segreto -F max_downloads=1
 ```
 
 Conserva `delete_token`: è l'unico modo per eliminare il file prima della scadenza e non viene più mostrato.
+
+### Upload a blocchi con ripresa
+
+L'interfaccia web invia i file a blocchi da 8 MB, quindi `post_max_size` e `upload_max_filesize` non limitano più la dimensione del file: conta solo `MAX_FILE_SIZE_MB`. Se la connessione cade, i blocchi già ricevuti restano sul server per 24 ore e, riselezionando lo stesso file, il caricamento riparte dal primo byte mancante. I caricamenti abbandonati vengono rimossi da `bin/cleanup.php`. Con la cifratura attiva la chiave cambia a ogni tentativo, quindi la ripresa dopo il ricaricamento della pagina non è possibile (i tentativi automatici durante la stessa sessione funzionano).
+
+```bash
+curl -s -X POST http://localhost:8000/api/uploads -d '{"files":[{"name":"grande.iso","size":3221225472}]}'
+curl -X PUT --data-binary @blocco0 "http://localhost:8000/api/uploads/ID?index=0&offset=0"
+curl -X POST -F expires_in=3600 http://localhost:8000/api/uploads/ID/complete
+```
+
+I blocchi vanno inviati in ordine; un `offset` diverso dai byte già ricevuti risponde `409`. La risposta di `complete` è quella di un upload normale.
+
+### Upload multiplo e ZIP
+
+Ripeti il campo `file[]` (con `file` PHP tiene solo l'ultimo):
+
+```bash
+curl -F 'file[]=@foto.jpg' -F 'file[]=@nota.txt' -F expires_in=3600 http://localhost:8000/api/files
+```
+
+La risposta è quella di un upload normale, con in più `item_count` e l'elenco `files` (`name`, `size`, `mime_type`); `name` è il nome dello zip (`file-drop-{codice}.zip`). Un solo file con `file` o `file[]` resta un upload singolo, senza zip.
+
+- **Un codice, un archivio.** Il download (`/d/{codice}/download` o `/api/files/{code}/download`) restituisce un **.zip** con tutti i file. Conta come **un solo download** e rispetta password e `max_downloads` come un file singolo.
+- **Generato al volo.** Lo zip usa il metodo *stored* (nessuna compressione) e il CRC32 di ogni file viene calcolato all'upload: gli header sono già completi, il server non crea file temporanei né tiene i file in memoria, e invia un `Content-Length` esatto (il browser mostra l'avanzamento).
+- **Nomi.** I nomi doppi diventano `foto.jpg`, `foto (2).jpg` (anche se differiscono solo per le maiuscole). Niente cartelle: i percorsi vengono ridotti al solo nome.
+- **Limiti.** `MAX_FILE_SIZE_MB` vale per il **totale** dei file; al massimo `MAX_FILES` file; il totale non può superare circa 4 GB (lo zip non usa ZIP64). Scadenza, pulizia (`cleanup`) ed eliminazione rimuovono insieme tutti i file dell'upload.
+- **Niente anteprima** per gli upload multipli.
+- **Cifratura.** Il server non vede nomi né contenuti, quindi non può creare lo zip: con la cifratura attiva è il **browser** a creare lo zip e poi a cifrarlo, e sul server arriva un unico file cifrato. Chi scarica ottiene `archivio.zip` dopo la decifratura. Nell'API un upload con `encrypted=1` e più file viene rifiutato (`422`).
+- Un download interrotto a metà resta contato, come per i file singoli.
 
 ### Informazioni, download, eliminazione
 
@@ -148,8 +188,8 @@ L'anteprima è **disattivata** per i file protetti da password (un `<img>` non p
 | 401 / 403 | Password richiesta / errata, oppure token di eliminazione non valido |
 | 404 | Codice inesistente |
 | 410 | File scaduto o con i download esauriti |
-| 413 | File sopra il limite |
-| 422 | Parametri non validi (scadenza, password, `max_downloads`, file vuoto) |
+| 413 | File (o totale dei file) sopra il limite |
+| 422 | Parametri non validi (scadenza, password, `max_downloads`, file vuoto, troppi file, cifrato con più file) |
 
 ## Struttura del progetto
 
@@ -157,16 +197,16 @@ L'anteprima è **disattivata** per i file protetti da password (un `<img>` non p
 bin/cleanup.php        pulizia dei file scaduti (cron)
 public/                unica cartella esposta dal web server
   index.php            front controller
-  assets/              CSS e JavaScript
+  assets/              CSS e JavaScript (zip.js: zip nel browser per i file cifrati)
     vendor/qrcode.js   qrcode-generator (MIT), aggiornabile con `npm run vendor`
 src/
   App.php              bootstrap e rotte
   Controller/          ApiController, WebController
   Http/                Request, Response, Router
-  Model/               StoredFile
+  Model/               StoredFile, StoredItem
   Repository/          FileRepository (SQLite)
   Service/             FileService, CodeGenerator
-  Support/             Config, Database, Preview (whitelist MIME), View
+  Support/             Config, Database, Preview (whitelist MIME), View, ZipStream (zip al volo)
 views/                 template PHP
 storage/               database e file caricati (non versionati)
 ```
@@ -208,3 +248,15 @@ Con Apache basta puntare il VirtualHost su `public/`: c'è già un `.htaccess`.
 ## Licenza
 
 MIT, vedi [LICENSE](LICENSE).
+
+
+## Navigazione client
+
+`public/assets/js/router.js` intercetta click sui link e invio dei form interni e chiede la pagina con l'header `X-Fd-Nav: 1`: in quel caso `View` restituisce solo il contenuto di `<main>` più un `<div id="fd-meta">` con titolo, layout largo e script necessari (`src/Support/View.php`). Senza JavaScript il sito funziona come prima.
+
+- Ogni script che dipende dal DOM della pagina si registra con `FileDrop.page(() => { ...; return cleanup; })`: il router lo rilancia a ogni cambio pagina e chiama la cleanup quando si esce.
+- `FileDrop.guard(() => messaggio | null)` chiede conferma prima di lasciare la pagina (usato durante un upload).
+- Per escludere un link o un form dal router: `data-no-router`. Sono già esclusi `/api/*`, `/assets/*`, `/d/{codice}/download` e `/d/{codice}/preview`.
+- Le pagine `/admin*` non vengono mai messe in cache né prefetchate (dipendono dalla sessione e consumano i messaggi flash).
+- Gli asset sono serviti con `?v=<mtime>` (`View::asset()`), così dopo un deploy il browser non mescola JS vecchio e HTML nuovo.
+- Gli `<script>` dentro le view non vengono eseguiti dalla navigazione client: carica gli script da JS con `FileDrop.load(src)`.
