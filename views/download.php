@@ -3,7 +3,7 @@
         <p class="code" aria-label="Codice <?= $this->e($file->code) ?>"><?= $this->e($file->code) ?></p>
     </div>
     <div class="ticket-stub">
-        <h1 class="file-name"><?= $this->e($file->originalName) ?></h1>
+        <h1 class="file-name"><?= $this->e($file->displayName()) ?></h1>
         <p class="file-meta">
             <?= $this->e($this->bytes($file->size)) ?>,
             scade il <time datetime="<?= $this->e(date(DATE_ATOM, $file->expiresAt)) ?>"
@@ -17,7 +17,26 @@
             <?php endif; ?>
         </p>
 
-        <?php if ($file->isProtected()): ?>
+        <?php if ($file->encrypted): ?>
+            <form method="post" action="/d/<?= $this->e($file->code) ?>/download" class="unlock" id="decrypt-form">
+                <p class="hint">Cifrato end-to-end: il server non vede mai il contenuto. La chiave sta nel link, dopo il
+                    #.<?php if ($file->maxDownloads !== null): ?> L'anteprima conta come download.<?php endif; ?></p>
+                <?php if ($file->isProtected()): ?>
+                    <label class="field">
+                        <span>Questo file è protetto da password</span>
+                        <input type="password" name="password" required autocomplete="off"
+                            aria-invalid="<?= $error ? 'true' : 'false' ?>">
+                    </label>
+                <?php endif; ?>
+                <p class="error" id="decrypt-error" role="alert" <?= $error ? '' : 'hidden' ?>><?= $this->e($error ?? '') ?>
+                </p>
+                <div class="decrypt-actions">
+                    <button class="btn" type="submit" id="decrypt-submit">Scarica e decifra</button>
+                    <button class="btn btn-secondary" type="button" id="decrypt-preview-btn">Anteprima</button>
+                </div>
+                <p class="hint" id="decrypt-status" role="status"></p>
+            </form>
+        <?php elseif ($file->isProtected()): ?>
             <form method="post" action="/d/<?= $this->e($file->code) ?>/download" class="unlock">
                 <label class="field">
                     <span>Questo file è protetto da password</span>
@@ -41,6 +60,9 @@
         </div>
     </div>
 </section>
+<?php if ($file->encrypted): ?>
+    <section class="preview" id="decrypt-preview" aria-label="Anteprima" hidden></section>
+<?php endif; ?>
 <?php if (($kind = $file->previewKind()) !== null):
     $src = '/d/' . rawurlencode($file->code) . '/preview'; ?>
     <section class="preview" aria-label="Anteprima">

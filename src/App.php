@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace FileDrop;
 
-use FileDrop\Controller\{ApiController, WebController};
+use FileDrop\Controller\{AdminController, ApiController, WebController};
 use FileDrop\Exception\HttpException;
 use FileDrop\Http\{Request, Response, Router};
-use FileDrop\Repository\FileRepository;
+use FileDrop\Repository\{FileRepository, LoginAttemptRepository, StatsRepository};
 use FileDrop\Service\{CodeGenerator, FileService};
-use FileDrop\Support\{Config, Database, View};
+use FileDrop\Support\{AdminSession, Config, Database, View};
 
 final class App
 {
@@ -26,9 +26,13 @@ final class App
         date_default_timezone_set('UTC');
 
         $config = Config::load($root);
-        $files = new FileService($config, new FileRepository(Database::connect($config->dbPath)), new CodeGenerator());
-        $web = new WebController($files, $config, new View($root . '/views'));
+        $pdo = Database::connect($config->dbPath);
+        $stats = new StatsRepository($pdo);
+        $files = new FileService($config, new FileRepository($pdo), new CodeGenerator(), $stats);
+        $view = new View($root . '/views');
+        $web = new WebController($files, $config, $view);
         $api = new ApiController($files, $config);
+        $admin = new AdminController($files, $config, $stats, new LoginAttemptRepository($pdo), new AdminSession($config->storagePath . '/sessions'), $view);
 
         $router = new Router();
         $router->add('GET', '/', $web->home(...));
@@ -36,6 +40,13 @@ final class App
         $router->add('GET', '/d/{code}/preview', $web->preview(...));
         $router->add('GET', '/d/{code}/download', $web->download(...));
         $router->add('POST', '/d/{code}/download', $web->download(...));
+
+        $router->add('GET', '/admin', $admin->dashboard(...));
+        $router->add('GET', '/admin/login', $admin->loginForm(...));
+        $router->add('POST', '/admin/login', $admin->login(...));
+        $router->add('POST', '/admin/logout', $admin->logout(...));
+        $router->add('POST', '/admin/cleanup', $admin->cleanup(...));
+        $router->add('POST', '/admin/files/{code}/delete', $admin->delete(...));
 
         $router->add('POST', '/api/files', $api->upload(...));
         $router->add('GET', '/api/files/{code}', $api->info(...));

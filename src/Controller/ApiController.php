@@ -30,11 +30,17 @@ final class ApiController extends Controller
             throw new HttpException(422, '"max_downloads" deve essere un numero intero positivo.');
         }
 
+        $encrypted = $request->post['encrypted'] ?? null;
+        if ($encrypted !== null && (!is_scalar($encrypted) || !in_array((string) $encrypted, ['', '0', '1'], true))) {
+            throw new HttpException(422, '"encrypted" deve essere 0 o 1.');
+        }
+
         $result = $this->files->upload(
             is_array($request->files['file'] ?? null) ? $request->files['file'] : null,
             $ttl === null ? null : (int) $ttl,
             is_string($password) ? $password : null,
             $maxDownloads === null ? null : (int) $maxDownloads,
+            $encrypted === '1',
         );
         $this->files->maybePurge();
 

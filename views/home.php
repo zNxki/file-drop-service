@@ -13,6 +13,15 @@
     </label>
 
     <div class="fields">
+        <label class="field wide check">
+            <span class="check-row">
+                <input type="checkbox" id="encrypt" name="encrypt" value="1" checked>
+                Cifra il file nel browser
+            </span>
+            <small class="hint" id="encrypt-hint">Il server non vede mai contenuto e nome del file. La chiave sta nel
+                link,
+                dopo il #: chi perde il link perde il file.</small>
+        </label>
         <label class="field">
             <span>Scade dopo</span>
             <select name="expires_in">

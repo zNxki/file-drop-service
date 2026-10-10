@@ -20,6 +20,20 @@ final class View
         return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
+    public function number(int $n): string
+    {
+        return number_format($n, 0, ',', '.');
+    }
+
+    public function time(int $timestamp): string
+    {
+        return sprintf(
+            '<time datetime="%s" data-local>%s UTC</time>',
+            gmdate('Y-m-d\TH:i:s\Z', $timestamp),
+            gmdate('d/m/Y H:i', $timestamp),
+        );
+    }
+
     public function bytes(int $bytes): string
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];

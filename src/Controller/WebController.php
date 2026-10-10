@@ -47,7 +47,7 @@ final class WebController extends Controller
         $file = $this->files->get($params['code']);
 
         return Response::html($this->view->render('download', [
-            'title' => $file->originalName . ' · File Drop',
+            'title' => $file->displayName() . ' · File Drop',
             'script' => true,
             'file' => $file,
             'error' => null,
@@ -68,7 +68,7 @@ final class WebController extends Controller
             $this->files->checkPassword($file, is_string($password) ? $password : null);
         } catch (HttpException $e) {
             return Response::html($this->view->render('download', [
-                'title' => $file->originalName . ' · File Drop',
+                'title' => $file->displayName() . ' · File Drop',
                 'script' => true,
                 'file' => $file,
                 'error' => $e->getMessage(),

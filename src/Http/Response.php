@@ -25,12 +25,14 @@ final class Response
         );
     }
 
-    public static function html(string $html, int $status = 200): self
+    public static function html(string $html, int $status = 200, array $headers = []): self
     {
-        return new self($status, [
+        return new self($status, $headers + [
             'Content-Type' => 'text/html; charset=utf-8',
             'Cache-Control' => 'no-store',
-            'Content-Security-Policy' => "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'",
+            'Content-Security-Policy' => "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            'Permissions-Policy' => 'camera=(), microphone=(), geolocation=(), payment=()',
+            'Cross-Origin-Opener-Policy' => 'same-origin',
         ], $html);
     }
 
@@ -90,7 +92,7 @@ final class Response
 
         $start = (int) $from;
         if ($to !== '' && (int) $to < $start) {
-            return null; // intervallo non valido: da specifica si ignora
+            return null;
         }
         if ($start >= $size) {
             return false;

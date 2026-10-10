@@ -17,7 +17,13 @@ final readonly class Config
         public string $dbPath,
         public string $storagePath,
         public float $cleanupProbability,
+        public string $adminPasswordHash = '',
     ) {
+    }
+
+    public function adminEnabled(): bool
+    {
+        return $this->adminPasswordHash !== '';
     }
 
     public static function load(string $root): self
@@ -43,6 +49,7 @@ final readonly class Config
             dbPath: $path($env('DB_PATH', 'storage/filedrop.sqlite')),
             storagePath: rtrim($path($env('STORAGE_PATH', 'storage')), '/\\'),
             cleanupProbability: min(1.0, max(0.0, (float) $env('CLEANUP_PROBABILITY', '0.02'))),
+            adminPasswordHash: $env('ADMIN_PASSWORD_HASH'),
         );
     }
 }

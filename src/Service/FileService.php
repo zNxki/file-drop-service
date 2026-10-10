@@ -5,21 +5,25 @@ namespace FileDrop\Service;
 
 use FileDrop\Exception\HttpException;
 use FileDrop\Repository\FileRepository;
+use FileDrop\Repository\StatsRepository;
 use FileDrop\Support\Config;
 use FileDrop\Model\StoredFile;
 
 final class FileService
 {
     public const MAX_DOWNLOADS = 1000;
+    public const LOG_RETENTION_DAYS = 90;
+    public const ENCRYPTION_MAGIC = 'FDE1';
 
     public function __construct(
         private readonly Config $config,
         private readonly FileRepository $repository,
         private readonly CodeGenerator $codes,
+        private readonly StatsRepository $stats,
     ) {
     }
 
-    public function upload(?array $upload, ?int $ttl, ?string $password, ?int $maxDownloads = null): array
+    public function upload(?array $upload, ?int $ttl, ?string $password, ?int $maxDownloads = null, bool $encrypted = false): array
     {
         $ttl ??= $this->config->defaultExpiry;
         if ($ttl < 60 || $ttl > $this->config->maxExpiry) {
@@ -54,8 +58,15 @@ final class FileService
         if ($size <= 0) {
             throw new HttpException(422, 'Il file è vuoto.');
         }
-        if ($size > $this->config->maxFileSize) {
+        $maxSize = $this->config->maxFileSize;
+        if ($encrypted) {
+            $maxSize += intdiv($maxSize, 65536) + 4096;
+        }
+        if ($size > $maxSize) {
             throw new HttpException(413, "Il file supera il limite consentito ($limit).");
+        }
+        if ($encrypted && !$this->hasEncryptionHeader((string) $upload['tmp_name'])) {
+            throw new HttpException(422, 'Il file non è nel formato cifrato previsto.');
         }
 
         $dir = $this->config->storagePath . '/uploads';
@@ -72,7 +83,7 @@ final class FileService
 
         $now = time();
         $deleteToken = bin2hex(random_bytes(16));
-        $name = $this->sanitizeName((string) ($upload['name'] ?? ''));
+        $name = $encrypted ? 'encrypted.bin' : $this->sanitizeName((string) ($upload['name'] ?? ''));
 
         for ($attempt = 0; $attempt < 10; $attempt++) {
             $code = $this->codes->generate($this->config->codeLength + intdiv($attempt, 5));
@@ -80,7 +91,7 @@ final class FileService
                 $code,
                 $name,
                 $storedName,
-                $this->detectMime($target),
+                $encrypted ? 'application/octet-stream' : $this->detectMime($target),
                 $size,
                 $password === null ? null : password_hash($password, PASSWORD_DEFAULT),
                 hash('sha256', $deleteToken),
@@ -88,6 +99,7 @@ final class FileService
                 $now,
                 $now + $ttl,
                 $maxDownloads,
+                $encrypted,
             );
             if ($this->repository->insert($file)) {
                 return ['file' => $file, 'deleteToken' => $deleteToken];
@@ -145,6 +157,7 @@ final class FileService
             fclose($handle);
             throw new HttpException(410, 'Il file ha raggiunto il numero massimo di download.');
         }
+        $this->logDownload($file);
         return $handle;
     }
 
@@ -172,17 +185,77 @@ final class FileService
 
     public function purgeExpired(): int
     {
-        $expired = $this->repository->findPurgeable(time());
+        $now = time();
+        $expired = $this->repository->findPurgeable($now);
         foreach ($expired as $file) {
             $this->remove($file);
         }
+        $this->stats->pruneLog($now - self::LOG_RETENTION_DAYS * 86400);
         return count($expired);
+    }
+
+    public function adminList(string $query, string $sort, bool $ascending, int $page, int $perPage): array
+    {
+        $total = $this->repository->count($query);
+        $pages = max(1, (int) ceil($total / $perPage));
+        $page = min(max(1, $page), $pages);
+
+        return [
+            'files' => $this->repository->search($query, $sort, $ascending, $perPage, ($page - 1) * $perPage),
+            'total' => $total,
+            'page' => $page,
+            'pages' => $pages,
+        ];
+    }
+
+    public function adminDelete(string $code): StoredFile
+    {
+        $file = $this->repository->find($code);
+        if ($file === null) {
+            throw new HttpException(404, 'File non trovato: forse è già stato eliminato.');
+        }
+        $this->remove($file);
+        return $file;
+    }
+
+    public function storageUsage(): array
+    {
+        $dir = $this->config->storagePath . '/uploads';
+        $files = 0;
+        $bytes = 0;
+        if (is_dir($dir)) {
+            foreach (new \FilesystemIterator($dir, \FilesystemIterator::SKIP_DOTS) as $entry) {
+                if ($entry->isFile()) {
+                    $files++;
+                    $bytes += $entry->getSize();
+                }
+            }
+        }
+
+        $free = @disk_free_space($this->config->storagePath);
+        $total = @disk_total_space($this->config->storagePath);
+
+        return [
+            'files' => $files,
+            'bytes' => $bytes,
+            'free' => $free === false ? null : (int) $free,
+            'total' => $total === false ? null : (int) $total,
+        ];
     }
 
     public function maybePurge(): void
     {
         if (mt_rand() / mt_getrandmax() < $this->config->cleanupProbability) {
             $this->purgeExpired();
+        }
+    }
+
+    private function logDownload(StoredFile $file): void
+    {
+        try {
+            $this->stats->recordDownload($file);
+        } catch (\Throwable $e) {
+            error_log('Registrazione download non riuscita: ' . $e->getMessage());
         }
     }
 
@@ -207,6 +280,18 @@ final class FileService
         $name = preg_replace('/[\x00-\x1F\x7F]/u', '', $name) ?? '';
         $name = trim(mb_substr($name, 0, 180));
         return $name === '' || $name === '.' || $name === '..' ? 'file' : $name;
+    }
+
+    private function hasEncryptionHeader(string $path): bool
+    {
+        $handle = @fopen($path, 'rb');
+        if ($handle === false) {
+            return false;
+        }
+        $head = fread($handle, strlen(self::ENCRYPTION_MAGIC));
+        fclose($handle);
+
+        return $head === self::ENCRYPTION_MAGIC;
     }
 
     private function detectMime(string $path): string

@@ -41,10 +41,21 @@ final readonly class Request
         return $this->path === '/api' || str_starts_with($this->path, '/api/');
     }
 
+    public function isSecure(): bool
+    {
+        return !empty($this->server['HTTPS']) && $this->server['HTTPS'] !== 'off';
+    }
+
     public function origin(): string
     {
-        $https = !empty($this->server['HTTPS']) && $this->server['HTTPS'] !== 'off';
-        return ($https ? 'https' : 'http') . '://' . ($this->server['HTTP_HOST'] ?? 'localhost');
+        return ($this->isSecure() ? 'https' : 'http') . '://' . ($this->server['HTTP_HOST'] ?? 'localhost');
+    }
+
+    public function ip(): string
+    {
+        $ip = $this->server['REMOTE_ADDR'] ?? '';
+
+        return is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP) !== false ? $ip : '0.0.0.0';
     }
 
     public function contentLength(): int
