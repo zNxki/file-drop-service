@@ -91,7 +91,7 @@ final class WebController extends Controller
             'script' => false,
             'status' => $e->status,
             'message' => $e->getMessage(),
-        ]), $e->status);
+        ]), $e->status, $e->headers);
     }
 
     private function downloadPage(Request $request, \FileDrop\Model\StoredFile $file, ?string $error = null, int $status = 200): Response

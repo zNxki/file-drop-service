@@ -77,8 +77,8 @@ final class StatsRepository
         }
 
         $stmt = $this->pdo->prepare(
-            "SELECT strftime('%Y-%m-%d', downloaded_at, 'unixepoch') AS day, COUNT(*) AS n
-             FROM download_log WHERE downloaded_at >= ? GROUP BY day"
+            "SELECT to_char(to_timestamp(downloaded_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, COUNT(*) AS n
+             FROM download_log WHERE downloaded_at >= ? GROUP BY 1"
         );
         $stmt->execute([$start]);
         foreach ($stmt->fetchAll() as $row) {

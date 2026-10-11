@@ -9,6 +9,7 @@
     0 2px 4px rgba(14, 26, 43, 0.06), 0 28px 54px -22px rgba(14, 26, 43, 0.36);
   --glass: color-mix(in srgb, var(--paper) 78%, transparent);
 }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --ok: #4ade9a;
@@ -24,22 +25,27 @@
 ::selection {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
+
 html {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
+
 body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
 .shell {
   max-width: 38rem;
   padding-top: 1rem;
 }
+
 .shell-wide {
   max-width: 76rem;
 }
+
 .zp-tree,
 .zp-viewer,
 .preview-text,
@@ -48,9 +54,11 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
+
 a {
   text-underline-offset: 3px;
 }
+
 input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--accent);
@@ -62,11 +70,13 @@ input[type="radio"] {
   justify-content: space-between;
   padding: 0.5rem 0 1.75rem;
 }
+
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 0.65rem;
 }
+
 .brand-mark {
   width: 2.1rem;
   height: 2.1rem;
@@ -77,9 +87,11 @@ input[type="radio"] {
     0 6px 14px -6px rgba(14, 26, 43, 0.5);
   transition: transform 0.45s var(--ease-spring);
 }
+
 .brand:hover .brand-mark {
   transform: rotate(-8deg) scale(1.1);
 }
+
 .brand-chip {
   transform-box: fill-box;
   transform-origin: center;
@@ -90,28 +102,29 @@ input[type="radio"] {
   line-height: 1.02;
   letter-spacing: -0.035em;
 }
+
 .intro p {
   font-size: 1.05rem;
   line-height: 1.6;
   margin: 1rem 0 1.1rem;
 }
+
 .w {
   display: inline-block;
 }
+
 .swipe {
   color: inherit;
   padding: 0 0.12em;
   margin: 0 -0.12em;
-  background: linear-gradient(
-      transparent 60%,
+  background: linear-gradient(transparent 60%,
       var(--mark) 60% 92%,
-      transparent 92%
-    )
-    no-repeat;
+      transparent 92%) no-repeat;
   background-size: 0% 100%;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+
 .chips {
   list-style: none;
   display: flex;
@@ -120,6 +133,7 @@ input[type="radio"] {
   margin: 0 0 1.5rem;
   padding: 0;
 }
+
 .chips li {
   display: inline-flex;
   align-items: center;
@@ -138,11 +152,13 @@ input[type="radio"] {
     border-color 0.2s,
     color 0.2s;
 }
+
 .chips li:hover {
   transform: translateY(-2px);
   border-color: var(--accent);
   color: var(--ink);
 }
+
 .chips svg,
 .stat-icon svg,
 .drop-icon {
@@ -152,6 +168,7 @@ input[type="radio"] {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
 .chips svg {
   width: 1rem;
   height: 1rem;
@@ -163,15 +180,18 @@ input[type="radio"] {
   box-shadow: var(--shadow-md);
   border-color: color-mix(in srgb, var(--line) 80%, transparent);
 }
+
 .field input,
 .field select,
 .search input {
   border-radius: 10px;
 }
+
 input:hover:not(:focus-visible),
 select:hover:not(:focus-visible) {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
 }
+
 .fields {
   gap: 1rem;
 }
@@ -182,6 +202,7 @@ select:hover:not(:focus-visible) {
   gap: 0.3rem;
   background: color-mix(in srgb, var(--tint) 38%, var(--paper));
 }
+
 .drop-icon {
   width: 3.4rem;
   height: 3.4rem;
@@ -196,17 +217,21 @@ select:hover:not(:focus-visible) {
     background-color 0.25s,
     color 0.25s;
 }
+
 .drop:hover .drop-icon,
 .drop.is-over .drop-icon {
   transform: translateY(-3px) scale(1.08);
 }
+
 .drop.has-file .drop-icon {
   color: var(--on-accent);
   background: var(--accent);
 }
+
 .drop-title {
   font-size: 1.15rem;
 }
+
 .item-list li {
   background: var(--paper);
   box-shadow: var(--shadow-sm);
@@ -216,21 +241,21 @@ select:hover:not(:focus-visible) {
 .btn {
   border-radius: 12px;
   letter-spacing: 0.005em;
-  background-image: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.2),
-    rgba(255, 255, 255, 0) 60%
-  );
+  background-image: linear-gradient(180deg,
+      rgba(255, 255, 255, 0.2),
+      rgba(255, 255, 255, 0) 60%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
     0 6px 14px -8px color-mix(in srgb, var(--accent) 70%, transparent);
 }
+
 .btn-secondary {
   background-color: transparent;
   background-image: none;
   color: var(--accent);
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
+
 .btn-secondary:hover:not(:disabled) {
   background-color: var(--tint);
   filter: none;
@@ -238,33 +263,36 @@ select:hover:not(:focus-visible) {
     inset 0 0 0 1.5px var(--accent),
     0 10px 20px -12px color-mix(in srgb, var(--accent) 70%, transparent);
 }
+
 .decrypt-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
 }
+
 .decrypt-actions .btn {
   flex: 1 1 10rem;
 }
+
 .bar {
   height: 0.7rem;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .ticket {
-  filter: drop-shadow(0 18px 22px rgba(14, 26, 43, 0.16))
-    drop-shadow(0 1px 0 var(--line));
+  filter: drop-shadow(0 18px 22px rgba(14, 26, 43, 0.16)) drop-shadow(0 1px 0 var(--line));
 }
+
 .ticket-main {
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(14, 26, 43, 0.05) 0 10px,
-    transparent 10px 20px
-  );
+  background-image: repeating-linear-gradient(135deg,
+      rgba(14, 26, 43, 0.05) 0 10px,
+      transparent 10px 20px);
 }
+
 .code {
   text-shadow: 0 2px 0 rgba(255, 255, 255, 0.35);
 }
+
 .file-name {
   letter-spacing: -0.02em;
 }
@@ -275,6 +303,7 @@ select:hover:not(:focus-visible) {
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   text-align: center;
 }
+
 .notice-status {
   font-size: clamp(4.5rem, 22vw, 7.5rem);
   background: linear-gradient(135deg, var(--accent), var(--ticket));
@@ -283,9 +312,11 @@ select:hover:not(:focus-visible) {
   color: transparent;
   width: fit-content;
 }
+
 .preview {
   box-shadow: var(--shadow-md);
 }
+
 .api pre {
   box-shadow: var(--shadow-sm);
 }
@@ -301,12 +332,14 @@ select:hover:not(:focus-visible) {
   backdrop-filter: blur(14px) saturate(1.4);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
 }
+
 .admin-head h1 {
   display: flex;
   align-items: center;
   gap: 0.7rem;
   font-size: clamp(1.5rem, 5vw, 2rem);
 }
+
 .admin-head h1::before {
   content: "";
   width: 0.6rem;
@@ -315,17 +348,21 @@ select:hover:not(:focus-visible) {
   background: var(--ok);
   flex: none;
 }
+
 .stats {
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
 }
+
 .stat,
 .panel {
   position: relative;
 }
+
 .stat {
   overflow: hidden;
   padding: 1.15rem 1.25rem;
 }
+
 .stat::before {
   content: "";
   position: absolute;
@@ -334,15 +371,19 @@ select:hover:not(:focus-visible) {
   background: linear-gradient(90deg, var(--accent), transparent);
   transform-origin: left;
 }
+
 .stat:nth-child(2)::before {
   background: linear-gradient(90deg, var(--ticket), transparent);
 }
+
 .stat:nth-child(3)::before {
   background: linear-gradient(90deg, #ff7a59, transparent);
 }
+
 .stat:nth-child(4)::before {
   background: linear-gradient(90deg, #7c8cff, transparent);
 }
+
 .stat-icon {
   position: absolute;
   top: 1rem;
@@ -355,16 +396,20 @@ select:hover:not(:focus-visible) {
   background: var(--tint);
   transition: transform 0.4s var(--ease-spring);
 }
+
 .stat:hover .stat-icon {
   transform: rotate(-8deg) scale(1.12);
 }
+
 .stat-label {
   padding-right: 3rem;
 }
+
 .stat-value {
   font-size: clamp(1.7rem, 4vw, 2.1rem);
   font-variant-numeric: tabular-nums;
 }
+
 .stat::after,
 .panel::after {
   content: "";
@@ -374,22 +419,23 @@ select:hover:not(:focus-visible) {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.3s;
-  background: radial-gradient(
-    280px circle at var(--mx, 50%) var(--my, 0%),
-    color-mix(in srgb, var(--accent) 11%, transparent),
-    transparent 62%
-  );
+  background: radial-gradient(280px circle at var(--mx, 50%) var(--my, 0%),
+      color-mix(in srgb, var(--accent) 11%, transparent),
+      transparent 62%);
 }
+
 .stat:hover::after,
 .panel:hover::after {
   opacity: 1;
 }
+
 .panel h2 {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   font-size: 1.05rem;
 }
+
 .panel h2::before {
   content: "";
   width: 0.28rem;
@@ -398,61 +444,70 @@ select:hover:not(:focus-visible) {
   background: var(--accent);
   flex: none;
 }
+
 .chart {
   border-radius: 8px;
-  background: repeating-linear-gradient(
-    to top,
-    color-mix(in srgb, var(--line) 70%, transparent) 0 1px,
-    transparent 1px 25%
-  );
+  background: repeating-linear-gradient(to top,
+      color-mix(in srgb, var(--line) 70%, transparent) 0 1px,
+      transparent 1px 25%);
 }
+
 .chart-bar {
   rx: 1.5px;
   transition:
     filter 0.2s,
     opacity 0.25s;
 }
+
 .chart:hover .chart-bar:not(:hover) {
   opacity: 0.55;
 }
+
 .chart-bar:hover {
   filter: brightness(1.18);
 }
+
 .usage {
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
 }
+
 .swatch {
   border-radius: 50%;
 }
+
 .rank li {
   margin-inline: -0.5rem;
   padding: 0.3rem 0.5rem;
   border-radius: 8px;
   transition: background-color 0.2s;
 }
+
 .rank li:hover {
   background: var(--tint);
 }
+
 .search input[type="search"] {
   padding-left: 2.4rem;
   transition:
     max-width 0.4s var(--ease-out),
     border-color 0.2s,
     box-shadow 0.25s;
-  background: var(--paper)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a98ab' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E")
-    no-repeat 0.8rem center / 1rem;
+  background: var(--paper) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a98ab' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 0.8rem center / 1rem;
 }
+
 .search input[type="search"]:focus {
   max-width: 32rem;
 }
+
 .table-wrap {
   border: 1px solid var(--line);
   border-radius: 12px;
 }
+
 .files {
   font-size: 0.85rem;
 }
+
 .files thead th {
   position: sticky;
   top: 0;
@@ -462,38 +517,46 @@ select:hover:not(:focus-visible) {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+
 .files tbody tr:last-child td {
   border-bottom: 0;
 }
+
 .files tbody tr:hover td:first-child {
   box-shadow: inset 3px 0 0 var(--accent);
 }
+
 .files code {
   padding: 0.15rem 0.45rem;
   border-radius: 6px;
   background: var(--tint);
   font: 600 0.8rem var(--mono);
 }
+
 .files th a {
-  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px
-    no-repeat;
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
   transition: background-size 0.3s var(--ease-out);
 }
+
 .files th a:hover {
   text-decoration: none;
   background-size: 100% 1px;
 }
+
 .badge {
   background: var(--paper);
 }
+
 .badge-ok {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border-color: transparent;
 }
+
 .badge-stale {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   border-color: transparent;
 }
+
 .flash {
   box-shadow: var(--shadow-sm);
   border-radius: 12px;
@@ -503,6 +566,7 @@ select:hover:not(:focus-visible) {
 .login-card {
   box-shadow: var(--shadow-lg);
 }
+
 .login-icon {
   width: 4rem;
   height: 4rem;

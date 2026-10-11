@@ -7,10 +7,12 @@
   opacity: 0;
   transition: opacity 0.25s ease;
 }
+
 .fd-progress.is-on {
   opacity: 1;
 }
-.fd-progress > i {
+
+.fd-progress>i {
   display: block;
   height: 100%;
   background: var(--accent, #0b6e69);
@@ -29,8 +31,9 @@ main:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .fd-progress,
-  .fd-progress > i {
+  .fd-progress>i {
     transition: none;
   }
 }

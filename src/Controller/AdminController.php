@@ -6,124 +6,45 @@ namespace FileDrop\Controller;
 use FileDrop\Exception\HttpException;
 use FileDrop\Http\Request;
 use FileDrop\Http\Response;
-use FileDrop\Repository\FileRepository;
-use FileDrop\Repository\LoginAttemptRepository;
-use FileDrop\Repository\StatsRepository;
+use FileDrop\Repository\{FileRepository, IpBlockRepository, LimitEventRepository, StatsRepository, UserRepository};
 use FileDrop\Service\FileService;
-use FileDrop\Support\AdminSession;
-use FileDrop\Support\Config;
-use FileDrop\Support\View;
+use FileDrop\Support\{AdminSession, Config, IpRange, Permissions, View};
 
-final class AdminController extends Controller
+final class AdminController extends PanelController
 {
     private const PER_PAGE = 20;
     private const CHART_DAYS = 30;
-    private const MAX_FAILED_LOGINS = 5;
-    private const LOGIN_WINDOW = 900;
-    private const MAX_DELAY_MICROSECONDS = 3_000_000;
-
-    private bool $secure = false;
+    private const LIMIT_EVENTS_HOURS = 24;
+    private const BLOCK_DURATIONS = [3600, 86400, 604800, 2592000, 0];
+    private const CLEANUP_RETURN = ['overview' => '/admin', 'files' => '/admin/files'];
 
     public function __construct(
         FileService $files,
         Config $config,
+        AdminSession $session,
+        View $view,
+        UserRepository $users,
         private readonly StatsRepository $stats,
-        private readonly LoginAttemptRepository $attempts,
-        private readonly AdminSession $session,
-        private readonly View $view
+        private readonly IpBlockRepository $blocks,
+        private readonly LimitEventRepository $events,
     ) {
-        parent::__construct($files, $config);
+        parent::__construct($files, $config, $session, $view, $users);
     }
 
-    public function loginForm(Request $request): Response
-    {
-        $this->open($request);
-        if ($this->session->isAuthenticated()) {
-            return Response::redirect('/admin');
-        }
-
-        return $this->renderLogin();
-    }
-
-    public function login(Request $request): Response
-    {
-        $this->open($request);
-        if (!$this->sameOrigin($request)) {
-            return $this->renderLogin('Richiesta non valida.', 403);
-        }
-        if (!$this->session->validCsrf($request->post['csrf'] ?? null)) {
-            return $this->renderLogin('La pagina è scaduta. Riprova.', 400);
-        }
-
-        $ip = $request->ip();
-        $now = time();
-        $since = $now - self::LOGIN_WINDOW;
-        if ($this->attempts->countSince($ip, $since) >= self::MAX_FAILED_LOGINS) {
-            $wait = max(1, ($this->attempts->oldestSince($ip, $since) ?? $now) + self::LOGIN_WINDOW - $now);
-            $this->audit('login_locked', $request);
-
-            return $this->renderLogin(
-                sprintf('Troppi tentativi falliti. Riprova tra %d minuti.', (int) ceil($wait / 60)),
-                429,
-                ['Retry-After' => (string) $wait]
-            );
-        }
-
-        $password = $request->post['password'] ?? null;
-        if (
-            is_string($password) && $password !== '' && strlen($password) <= 1024
-            && password_verify($password, $this->config->adminPasswordHash)
-        ) {
-            $this->attempts->clear($ip);
-            $this->session->login();
-            $this->audit('login_ok', $request);
-
-            return Response::redirect('/admin');
-        }
-
-        $this->attempts->record($ip, $now);
-        $failures = $this->attempts->countSince($ip, $since);
-        usleep(min(self::MAX_DELAY_MICROSECONDS, 300_000 * 2 ** max(0, $failures - 1)));
-        $this->audit('login_failed', $request);
-
-        return $this->renderLogin('Password errata.', 403);
-    }
-
-    public function logout(Request $request): Response
-    {
-        $this->open($request);
-        if ($this->sameOrigin($request) && $this->session->validCsrf($request->post['csrf'] ?? null)) {
-            $this->session->logout();
-            $this->audit('logout', $request);
-        }
-
-        return Response::redirect('/admin/login');
-    }
-
-    public function dashboard(Request $request): Response
+    public function overview(Request $request): Response
     {
         if (($denied = $this->guard($request)) !== null) {
             return $denied;
         }
-
-        $query = $this->text($request->query['q'] ?? null, 100);
-        $sort = $this->sortKey($request->query['sort'] ?? null);
-        $dir = $request->query['dir'] ?? null;
-        $ascending = $dir === 'asc' || ($dir !== 'desc' && $sort === 'name');
-        $page = $this->pageNumber($request->query['page'] ?? null);
+        if (!$this->user->can(Permissions::STATS_VIEW)) {
+            return Response::redirect($this->homeUrl());
+        }
 
         $now = time();
         $disk = $this->files->storageUsage();
         $totals = $this->stats->fileTotals($now);
-        $list = $this->files->adminList($query, $sort, $ascending, $page, self::PER_PAGE);
 
-        return Response::html($this->view->render('admin/dashboard', [
-            'title' => 'Amministrazione · File Drop',
-            'script' => true,
-            'wide' => true,
-            'noindex' => true,
-            'csrf' => $this->session->csrf(),
-            'flash' => $this->session->pullFlash(),
+        return $this->page('admin/overview', 'Panoramica', 'overview', [
             'now' => $now,
             'disk' => $disk,
             'usage' => $this->usage($disk, $totals),
@@ -132,18 +53,58 @@ final class AdminController extends Controller
             'perDay' => $this->stats->downloadsPerDay(self::CHART_DAYS, $now),
             'top' => $this->stats->topFiles($now - self::CHART_DAYS * 86400, 5),
             'recent' => $this->stats->recentDownloads(10),
+            'canCleanup' => $this->user->can(Permissions::FILES_DELETE),
+        ]);
+    }
+
+    public function files(Request $request): Response
+    {
+        if (($denied = $this->guard($request, Permissions::FILES_VIEW)) !== null) {
+            return $denied;
+        }
+
+        $query = $this->text($request->query['q'] ?? null, 100);
+        $sort = $this->sortKey($request->query['sort'] ?? null);
+        $dir = $request->query['dir'] ?? null;
+        $ascending = $dir === 'asc' || ($dir !== 'desc' && $sort === 'name');
+        $page = $this->pageNumber($request->query['page'] ?? null);
+        $now = time();
+        $list = $this->files->adminList($query, $sort, $ascending, $page, self::PER_PAGE);
+
+        return $this->page('admin/files', 'File', 'files', [
+            'now' => $now,
+            'totals' => $this->stats->fileTotals($now),
             'list' => $list,
             'q' => $query,
             'sort' => $sort,
             'ascending' => $ascending,
-            'perPage' => self::PER_PAGE,
             'retentionDays' => FileService::LOG_RETENTION_DAYS,
-        ]), 200, $this->headers());
+            'canDelete' => $this->user->can(Permissions::FILES_DELETE),
+        ]);
+    }
+
+    public function security(Request $request): Response
+    {
+        if (($denied = $this->guard($request, Permissions::SECURITY_VIEW)) !== null) {
+            return $denied;
+        }
+
+        $now = time();
+        $blocks = $this->blocks->all($now);
+
+        return $this->page('admin/security', 'Sicurezza', 'security', [
+            'blocks' => $blocks,
+            'blockedRanges' => array_column($blocks, 'cidr'),
+            'limitEvents' => $this->events->recent($now - self::LIMIT_EVENTS_HOURS * 3600, 15),
+            'limitHours' => self::LIMIT_EVENTS_HOURS,
+            'ownIp' => $request->ip(),
+            'canManage' => $this->user->can(Permissions::SECURITY_MANAGE),
+        ]);
     }
 
     public function delete(Request $request, array $params): Response
     {
-        if (($denied = $this->guard($request)) !== null) {
+        if (($denied = $this->guard($request, Permissions::FILES_DELETE)) !== null) {
             return $denied;
         }
         $back = Response::redirect($this->listUrl($request->post));
@@ -163,9 +124,10 @@ final class AdminController extends Controller
 
     public function cleanup(Request $request): Response
     {
-        if (($denied = $this->guard($request)) !== null) {
+        if (($denied = $this->guard($request, Permissions::FILES_DELETE)) !== null) {
             return $denied;
         }
+        $target = self::CLEANUP_RETURN[$request->post['return'] ?? ''] ?? self::CLEANUP_RETURN['files'];
         if ($this->validPost($request)) {
             $removed = $this->files->purgeExpired();
             $this->session->flash('ok', match ($removed) {
@@ -175,72 +137,64 @@ final class AdminController extends Controller
             });
         }
 
-        return Response::redirect($this->listUrl($request->post));
+        return Response::redirect($target === '/admin/files' ? $this->listUrl($request->post) : $target);
     }
 
-    private function open(Request $request): void
+    public function block(Request $request): Response
     {
-        if (!$this->config->adminEnabled()) {
-            throw new HttpException(404, 'Pagina non trovata.');
+        if (($denied = $this->guard($request, Permissions::SECURITY_MANAGE)) !== null) {
+            return $denied;
         }
-        $this->secure = $request->isSecure() || str_starts_with($this->config->appUrl, 'https://');
-        $this->session->start($this->secure, $request->header('User-Agent') ?? '');
-    }
-
-    private function guard(Request $request): ?Response
-    {
-        $this->open($request);
-
-        return $this->session->isAuthenticated() ? null : Response::redirect('/admin/login');
-    }
-
-    private function validPost(Request $request): bool
-    {
-        if ($this->sameOrigin($request) && $this->session->validCsrf($request->post['csrf'] ?? null)) {
-            return true;
-        }
-        $this->session->flash('error', 'La pagina è scaduta: l\'azione non è stata eseguita. Riprova.');
-
-        return false;
-    }
-
-    private function sameOrigin(Request $request): bool
-    {
-        $site = $request->header('Sec-Fetch-Site');
-        if ($site !== null) {
-            return in_array($site, ['same-origin', 'none'], true);
+        $back = Response::redirect('/admin/security');
+        if (!$this->validPost($request)) {
+            return $back;
         }
 
-        $origin = $request->header('Origin');
-        if ($origin === null) {
-            return true;
+        $cidr = IpRange::normalize($this->text($request->post['ip'] ?? null, 64));
+        if ($cidr === null) {
+            $this->session->flash('error', sprintf(
+                'Indirizzo non valido. Accetto IPv4 e IPv6, singoli o in formato CIDR (non oltre /%d per IPv4 e /%d per IPv6).',
+                IpRange::MIN_BITS_V4,
+                IpRange::MIN_BITS_V6
+            ));
+
+            return $back;
+        }
+        if (IpRange::matches($request->ip(), [$cidr])) {
+            $this->session->flash('error', 'Questo intervallo comprende il tuo indirizzo: non puoi bloccarti da solo.');
+
+            return $back;
         }
 
-        $originHost = parse_url($origin, PHP_URL_HOST);
-        $host = parse_url('//' . ($request->server['HTTP_HOST'] ?? ''), PHP_URL_HOST);
+        $seconds = (int) ($request->post['duration'] ?? 0);
+        $seconds = in_array($seconds, self::BLOCK_DURATIONS, true) ? $seconds : 86400;
+        $now = time();
+        $this->blocks->add($cidr, $this->text($request->post['reason'] ?? null, 120), $now, $seconds === 0 ? null : $now + $seconds);
+        error_log(sprintf('[admin-block] blocked cidr=%s seconds=%d by=%s user=%s', $cidr, $seconds, $request->ip(), $this->user->username));
+        $this->session->flash('ok', sprintf('Bloccato %s.', $cidr));
 
-        return is_string($originHost) && is_string($host) && strcasecmp($originHost, $host) === 0;
+        return $back;
     }
 
-    private function headers(array $extra = []): array
+    public function unblock(Request $request): Response
     {
-        return $extra + ($this->secure ? ['Strict-Transport-Security' => 'max-age=31536000'] : []);
-    }
+        if (($denied = $this->guard($request, Permissions::SECURITY_MANAGE)) !== null) {
+            return $denied;
+        }
+        $back = Response::redirect('/admin/security');
+        if (!$this->validPost($request)) {
+            return $back;
+        }
 
-    private function audit(string $event, Request $request): void
-    {
-        error_log(sprintf('[admin-auth] %s ip=%s', $event, $request->ip()));
-    }
+        $id = $request->post['id'] ?? null;
+        if (is_string($id) && ctype_digit($id) && strlen($id) < 10 && $this->blocks->remove((int) $id)) {
+            error_log(sprintf('[admin-block] unblocked id=%s by=%s user=%s', $id, $request->ip(), $this->user->username));
+            $this->session->flash('ok', 'Blocco rimosso.');
+        } else {
+            $this->session->flash('error', 'Blocco non trovato.');
+        }
 
-    private function renderLogin(?string $error = null, int $status = 200, array $headers = []): Response
-    {
-        return Response::html($this->view->render('admin/login', [
-            'title' => 'Accesso · File Drop',
-            'script' => false,
-            'noindex' => true,
-            'csrf' => $this->session->csrf(),
-            'error' => $error,
-        ]), $status, $this->headers($headers));
+        return $back;
     }
 
     private function usage(array $disk, array $totals): array
@@ -275,12 +229,7 @@ final class AdminController extends Controller
             $params['page'] = $page;
         }
 
-        return '/admin' . ($params === [] ? '' : '?' . http_build_query($params));
-    }
-
-    private function text(mixed $value, int $max): string
-    {
-        return is_string($value) ? mb_substr(trim($value), 0, $max) : '';
+        return '/admin/files' . ($params === [] ? '' : '?' . http_build_query($params));
     }
 
     private function sortKey(mixed $value): string

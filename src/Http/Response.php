@@ -32,9 +32,7 @@ final class Response
             'Content-Type' => 'text/html; charset=utf-8',
             'Cache-Control' => 'no-store',
             'Vary' => 'X-Fd-Nav',
-            'Content-Security-Policy' => "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-            'Permissions-Policy' => 'camera=(), microphone=(), geolocation=(), payment=()',
-            'Cross-Origin-Opener-Policy' => 'same-origin',
+            'Content-Security-Policy' => "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
         ], $html);
     }
 
@@ -119,11 +117,25 @@ final class Response
         return sprintf('%s; filename="%s"; filename*=UTF-8\'\'%s', $type, $fallback, rawurlencode($name));
     }
 
-    public function send(): void
+    private const BASE_HEADERS = [
+        'X-Content-Type-Options' => 'nosniff',
+        'Referrer-Policy' => 'no-referrer',
+        'Permissions-Policy' => 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=()',
+        'Cross-Origin-Opener-Policy' => 'same-origin',
+        'Cross-Origin-Resource-Policy' => 'same-origin',
+        'X-Frame-Options' => 'DENY',
+    ];
+
+    public function send(bool $secure = false): void
     {
         http_response_code($this->status);
-        header('X-Content-Type-Options: nosniff');
-        header('Referrer-Policy: no-referrer');
+        foreach (self::BASE_HEADERS as $name => $value) {
+            header($name . ': ' . $value);
+        }
+        if ($secure) {
+            header('Strict-Transport-Security: max-age=31536000');
+        }
+        $this->sendDefaultCsp();
         foreach ($this->headers as $name => $value) {
             header($name . ': ' . $value);
         }
@@ -137,6 +149,18 @@ final class Response
             return;
         }
         echo $this->body;
+    }
+
+    private function sendDefaultCsp(): void
+    {
+        $headers = array_change_key_case($this->headers, CASE_LOWER);
+        if (isset($headers['content-security-policy'])) {
+            return;
+        }
+        if (str_starts_with(strtolower((string) ($headers['content-type'] ?? '')), 'application/pdf')) {
+            return;
+        }
+        header("Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     }
 
     private function streamChunks(): void

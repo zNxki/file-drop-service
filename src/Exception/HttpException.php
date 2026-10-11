@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 namespace FileDrop\Exception;
 
-final class HttpException extends \RuntimeException
+class HttpException extends \RuntimeException
 {
-    public function __construct(public readonly int $status, string $message)
+    public function __construct(public readonly int $status, string $message, public readonly array $headers = [])
     {
         parent::__construct($message, $status);
     }

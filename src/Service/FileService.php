@@ -22,6 +22,8 @@ final class FileService
         private readonly FileRepository $repository,
         private readonly CodeGenerator $codes,
         private readonly StatsRepository $stats,
+        private readonly QuotaService $quotas,
+        private readonly ?VirusScanner $scanner = null,
     ) {
     }
 
@@ -40,7 +42,7 @@ final class FileService
         return $encrypted ? $maxSize + intdiv($maxSize, 65536) + 4096 : $maxSize;
     }
 
-    public function upload(array $uploads, ?int $ttl, ?string $password, ?int $maxDownloads = null, bool $encrypted = false): array
+    public function upload(array $uploads, ?int $ttl, ?string $password, ?int $maxDownloads = null, bool $encrypted = false, string $client = ''): array
     {
         $ttl ??= $this->config->defaultExpiry;
         if ($ttl < 60 || $ttl > $this->config->maxExpiry) {
@@ -90,6 +92,14 @@ final class FileService
         }
         if ($encrypted && !$this->hasEncryptionHeader((string) $uploads[0]['tmp_name'])) {
             throw new HttpException(422, 'Il file non è nel formato cifrato previsto.');
+        }
+        if ($client !== '') {
+            $this->quotas->assert($client, $total);
+        }
+        if ($this->scanner !== null && !$encrypted) {
+            foreach ($uploads as $upload) {
+                $this->scanner->scan((string) $upload['tmp_name'], $this->sanitizeName((string) ($upload['name'] ?? '')));
+            }
         }
 
         $dir = $this->config->storagePath . '/uploads';
@@ -151,7 +161,10 @@ final class FileService
                 $encrypted,
                 $count,
             );
-            if ($this->repository->insert($file, $multiple ? $items : [])) {
+            if ($this->repository->insert($file, $multiple ? $items : [], $client === '' ? null : $this->quotas->key($client))) {
+                if ($client !== '') {
+                    $this->quotas->record($client, $total);
+                }
                 return ['file' => $file, 'deleteToken' => $deleteToken, 'items' => $multiple ? $items : []];
             }
         }
@@ -160,6 +173,11 @@ final class FileService
             @unlink($path);
         }
         throw new HttpException(500, 'Impossibile generare un codice univoco.');
+    }
+
+    public function assertQuota(string $client, int $bytes): void
+    {
+        $this->quotas->assert($client, $bytes);
     }
 
     public function items(StoredFile $file): array
@@ -294,6 +312,7 @@ final class FileService
             $this->remove($file);
         }
         $this->stats->pruneLog($now - self::LOG_RETENTION_DAYS * 86400);
+        $this->quotas->prune($now);
         return count($expired);
     }
 

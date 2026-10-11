@@ -12,7 +12,7 @@ final class FileRepository
 {
     public const SORTS = [
         'created' => 'created_at',
-        'name' => 'original_name COLLATE NOCASE',
+        'name' => 'LOWER(original_name)',
         'size' => 'size',
         'downloads' => 'downloads',
         'expires' => 'expires_at',
@@ -22,27 +22,28 @@ final class FileRepository
     {
     }
 
-    public function insert(StoredFile $f, array $items = []): bool
+    public function insert(StoredFile $f, array $items = [], ?string $uploader = null): bool
     {
         $this->pdo->beginTransaction();
         try {
             $this->pdo->prepare(
-                'INSERT INTO files (code, original_name, stored_name, mime_type, size, password_hash, delete_token_hash, downloads, max_downloads, created_at, expires_at, encrypted, item_count)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)'
+                'INSERT INTO files (code, original_name, stored_name, mime_type, size, password_hash, delete_token_hash, downloads, max_downloads, created_at, expires_at, encrypted, item_count, uploader)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)'
             )->execute([
-                $f->code,
-                $f->originalName,
-                $f->storedName,
-                $f->mimeType,
-                $f->size,
-                $f->passwordHash,
-                $f->deleteTokenHash,
-                $f->maxDownloads,
-                $f->createdAt,
-                $f->expiresAt,
-                $f->encrypted ? 1 : 0,
-                $f->itemCount,
-            ]);
+                        $f->code,
+                        $f->originalName,
+                        $f->storedName,
+                        $f->mimeType,
+                        $f->size,
+                        $f->passwordHash,
+                        $f->deleteTokenHash,
+                        $f->maxDownloads,
+                        $f->createdAt,
+                        $f->expiresAt,
+                        $f->encrypted ? 1 : 0,
+                        $f->itemCount,
+                        $uploader,
+                    ]);
 
             if ($items !== []) {
                 $stmt = $this->pdo->prepare(
@@ -58,7 +59,7 @@ final class FileRepository
             return true;
         } catch (PDOException $e) {
             $this->pdo->rollBack();
-            if (($e->errorInfo[1] ?? null) === 19) { // SQLITE_CONSTRAINT
+            if (($e->errorInfo[0] ?? null) === '23505') {
                 return false;
             }
             throw $e;
@@ -112,8 +113,8 @@ final class FileRepository
         $stmt = $this->pdo->prepare(
             "SELECT * FROM files $where ORDER BY $column $direction, code ASC LIMIT :limit OFFSET :offset"
         );
-        foreach ($params as $i => $value) {
-            $stmt->bindValue($i + 1, $value);
+        foreach ($params as $name => $value) {
+            $stmt->bindValue($name, $value);
         }
         $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue('offset', $offset, PDO::PARAM_INT);
@@ -139,7 +140,7 @@ final class FileRepository
         }
         $like = '%' . strtr($query, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
 
-        return ["WHERE original_name LIKE ? ESCAPE '!' OR code LIKE ? ESCAPE '!'", [$like, $like]];
+        return ["WHERE original_name ILIKE :name ESCAPE '!' OR code ILIKE :code ESCAPE '!'", ['name' => $like, 'code' => $like]];
     }
 
     public function findPurgeable(int $now): array

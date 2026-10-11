@@ -5,7 +5,6 @@ namespace FileDrop\Support;
 
 final class View
 {
-    /** Script caricati nelle pagine che hanno bisogno di upload/download. */
     private const PAGE_SCRIPTS = [
         '/assets/js/crypto.js',
         '/assets/js/zip.js',
@@ -28,7 +27,10 @@ final class View
     public function render(string $template, array $data = []): string
     {
         $content = $this->capture($template, $data);
-        $scripts = !empty($data['script']) ? self::PAGE_SCRIPTS : [];
+        if (!empty($data['panel'])) {
+            $content = $this->capture('admin/shell', $data + ['inner' => $content]);
+        }
+        $scripts = array_merge(!empty($data['script']) ? self::PAGE_SCRIPTS : [], $data['extraScripts'] ?? []);
 
         if ($this->fragment) {
             return sprintf(

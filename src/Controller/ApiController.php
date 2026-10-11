@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace FileDrop\Controller;
 
 use FileDrop\Exception\HttpException;
+use FileDrop\Exception\VirusDetectedException;
 use FileDrop\Http\Request;
 use FileDrop\Http\Response;
 use FileDrop\Service\ChunkService;
@@ -35,6 +36,7 @@ final class ApiController extends Controller
             $password,
             $maxDownloads,
             $encrypted,
+            $request->clientKey(),
         );
         $this->files->maybePurge();
 
@@ -54,7 +56,7 @@ final class ApiController extends Controller
 
         $this->chunks->maybePurge();
 
-        return Response::json(['data' => $this->chunks->init($body['files'], $encrypted)], 201);
+        return Response::json(['data' => $this->chunks->init($body['files'], $encrypted, $request->clientKey())], 201);
     }
 
     public function uploadStatus(Request $request, array $params): Response
@@ -85,7 +87,12 @@ final class ApiController extends Controller
         $taken = $this->chunks->take($params['id']);
         [$ttl, $password, $maxDownloads] = $this->options($request);
 
-        $result = $this->files->upload($taken['uploads'], $ttl, $password, $maxDownloads, $taken['encrypted']);
+        try {
+            $result = $this->files->upload($taken['uploads'], $ttl, $password, $maxDownloads, $taken['encrypted'], $request->clientKey());
+        } catch (VirusDetectedException $e) {
+            $this->chunks->discard($params['id']);
+            throw $e;
+        }
         $this->chunks->discard($params['id']);
         $this->files->maybePurge();
 

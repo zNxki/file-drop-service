@@ -18,7 +18,7 @@ final class ChunkService
     ) {
     }
 
-    public function init(array $declared, bool $encrypted): array
+    public function init(array $declared, bool $encrypted, string $client = ''): array
     {
         $count = count($declared);
         if ($count === 0) {
@@ -48,6 +48,10 @@ final class ChunkService
             throw new HttpException(413, $count > 1
                 ? 'Il totale dei file supera il limite consentito (' . $this->files->formatBytes($limit) . ').'
                 : 'Il file supera il limite consentito (' . $this->files->formatBytes($limit) . ').');
+        }
+
+        if ($client !== '') {
+            $this->files->assertQuota($client, $total);
         }
 
         $id = bin2hex(random_bytes(16));

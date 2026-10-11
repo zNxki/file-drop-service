@@ -8,6 +8,8 @@ final class AdminSession
     private const IDLE_TIMEOUT = 1800;
     private const ABSOLUTE_TIMEOUT = 28800;
     private const ROTATE_AFTER = 300;
+    private const TWO_FACTOR_TIMEOUT = 300;
+    public const TWO_FACTOR_MAX_FAILS = 5;
 
     private bool $secure = false;
     private string $agent = '';
@@ -34,7 +36,7 @@ final class AdminSession
 
     public function isAuthenticated(): bool
     {
-        if (empty($_SESSION['admin'])) {
+        if (empty($_SESSION['uid'])) {
             return false;
         }
 
@@ -57,12 +59,82 @@ final class AdminSession
         return true;
     }
 
-    public function login(): void
+    public function userId(): int
+    {
+        return (int) ($_SESSION['uid'] ?? 0);
+    }
+
+    public function stamp(): string
+    {
+        return (string) ($_SESSION['stamp'] ?? '');
+    }
+
+    public function restamp(string $stamp): void
+    {
+        $_SESSION['stamp'] = $stamp;
+    }
+
+    public function startTwoFactor(int $userId): void
+    {
+        session_regenerate_id(true);
+        $_SESSION = ['pending_2fa' => time(), 'pending_uid' => $userId, 'tf_fails' => 0, 'agent' => $this->agent];
+    }
+
+    public function pendingUserId(): int
+    {
+        return (int) ($_SESSION['pending_uid'] ?? 0);
+    }
+
+    public function pendingTwoFactor(): bool
+    {
+        $since = (int) ($_SESSION['pending_2fa'] ?? 0);
+        if ($since === 0) {
+            return false;
+        }
+        if (time() - $since > self::TWO_FACTOR_TIMEOUT || !hash_equals((string) ($_SESSION['agent'] ?? ''), $this->agent)) {
+            $this->cancelTwoFactor();
+            return false;
+        }
+
+        return true;
+    }
+
+    public function twoFactorFailed(): int
+    {
+        $_SESSION['tf_fails'] = (int) ($_SESSION['tf_fails'] ?? 0) + 1;
+
+        return max(0, self::TWO_FACTOR_MAX_FAILS - $_SESSION['tf_fails']);
+    }
+
+    public function cancelTwoFactor(): void
+    {
+        unset($_SESSION['pending_2fa'], $_SESSION['pending_uid'], $_SESSION['tf_fails']);
+    }
+
+    public function setupSecret(): ?string
+    {
+        $secret = $_SESSION['totp_setup'] ?? null;
+
+        return is_string($secret) ? $secret : null;
+    }
+
+    public function storeSetupSecret(string $secret): void
+    {
+        $_SESSION['totp_setup'] = $secret;
+    }
+
+    public function clearSetupSecret(): void
+    {
+        unset($_SESSION['totp_setup']);
+    }
+
+    public function login(int $userId, string $stamp): void
     {
         session_regenerate_id(true);
         $now = time();
         $_SESSION = [
-            'admin' => true,
+            'uid' => $userId,
+            'stamp' => $stamp,
             'started' => $now,
             'seen' => $now,
             'rotated' => $now,

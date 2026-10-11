@@ -7,16 +7,23 @@
             <circle cx="12" cy="15.5" r="1.2" fill="currentColor" stroke="none"></circle>
         </svg>
         <h1>Amministrazione</h1>
-        <p class="login-lead">Accedi per gestire i file caricati e consultare lo spazio occupato e i download.</p>
+        <p class="login-lead">Accedi con il tuo account per gestire i file caricati, le statistiche e la sicurezza.</p>
 
         <form class="login-form" method="post" action="/admin/login">
             <input type="hidden" name="csrf" value="<?= $this->e($csrf) ?>">
 
             <div class="field">
+                <label for="username">Nome utente</label>
+                <input id="username" type="text" name="username" required autofocus autocomplete="username"
+                    maxlength="32" value="<?= $this->e($username ?? '') ?>" autocapitalize="none" spellcheck="false"
+                    <?= !empty($error) ? ' aria-invalid="true" aria-describedby="login-error"' : '' ?>>
+            </div>
+
+            <div class="field">
                 <label for="password">Password</label>
                 <div class="password-wrap">
-                    <input id="password" type="password" name="password" required autofocus
-                        autocomplete="current-password" maxlength="1024" <?= !empty($error) ? ' aria-invalid="true" aria-describedby="login-error"' : '' ?>>
+                    <input id="password" type="password" name="password" required autocomplete="current-password"
+                        maxlength="1024" <?= !empty($error) ? ' aria-invalid="true" aria-describedby="login-error"' : '' ?>>
                     <button class="password-toggle" type="button" data-toggle-password aria-controls="password"
                         aria-pressed="false">Mostra</button>
                 </div>

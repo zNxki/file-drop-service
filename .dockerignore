@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+vendor
+node_modules
+storage/*
+!storage/.gitkeep
+!storage/.htaccess
+Dockerfile
+docker-compose.yml
+.dockerignore

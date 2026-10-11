@@ -15,13 +15,15 @@
     <link rel="stylesheet" href="<?= $this->e($this->asset('/assets/style/motion.css')) ?>">
     <link rel="stylesheet" href="<?= $this->e($this->asset('/assets/style/theme.css')) ?>">
     <link rel="stylesheet" href="<?= $this->e($this->asset('/assets/style/router.css')) ?>">
+    <link rel="stylesheet" href="<?= $this->e($this->asset('/assets/style/admin.css')) ?>">
 </head>
 
 <body>
     <div class="shell<?= !empty($wide) ? ' shell-wide' : '' ?>">
         <header class="top"><a class="brand" href="/">File Drop</a></header>
         <main><?= $content ?></main>
-        <footer class="foot" <?= !empty($wide) ? 'hidden' : '' ?>>I file vengono eliminati automaticamente alla scadenza.</footer>
+        <footer class="foot" <?= !empty($wide) ? 'hidden' : '' ?>>I file vengono eliminati automaticamente alla scadenza.
+        </footer>
     </div>
     <div class="visually-hidden" id="fd-announcer" role="status" aria-live="polite"></div>
 
