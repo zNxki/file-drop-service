@@ -1,0 +1,97 @@
+:root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #e8edf1;
+    --paper: #ffffff;
+    --ink: #0e1a2b;
+    --slate: #556377;
+    --line: #c5ceda;
+    --accent: #0b6e69;
+    --on-accent: #ffffff;
+    --tint: #dcebea;
+    --danger: #b42f2f;
+    --ok: #138a5b;
+    --mark: var(--ticket);
+    --shadow-sm: 0 1px 2px rgba(14, 26, 43, 0.06);
+    --shadow-md:
+        0 1px 2px rgba(14, 26, 43, 0.06), 0 10px 26px -12px rgba(14, 26, 43, 0.2);
+    --shadow-lg:
+        0 2px 4px rgba(14, 26, 43, 0.06), 0 28px 54px -22px rgba(14, 26, 43, 0.36);
+    --hl-kw: #a626a4;
+    --hl-fn: #1d5fd1;
+    --hl-str: #1f7a3a;
+    --hl-num: #a84b05;
+    --hl-com: #5a6b7e;
+    --hl-var: #c2410c;
+    --hl-type: #0b6e69;
+    --hl-prop: #0369a1;
+    --hl-lit: #b4306a;
+}
+
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a111d;
+    --paper: #131d2e;
+    --ink: #e9eef6;
+    --slate: #94a3b8;
+    --line: #2a3850;
+    --accent: #5cd6c9;
+    --on-accent: #062826;
+    --tint: #14313a;
+    --danger: #ff8a8a;
+    --ok: #4ade9a;
+    --mark: color-mix(in srgb, var(--ticket) 42%, transparent);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+    --shadow-md:
+        0 1px 2px rgba(0, 0, 0, 0.45), 0 12px 30px -14px rgba(0, 0, 0, 0.7);
+    --shadow-lg:
+        0 2px 4px rgba(0, 0, 0, 0.45), 0 30px 56px -24px rgba(0, 0, 0, 0.8);
+    --hl-kw: #c792ea;
+    --hl-fn: #82aaff;
+    --hl-str: #a5d6a7;
+    --hl-num: #f9a65b;
+    --hl-com: #8393a8;
+    --hl-var: #ff9e64;
+    --hl-type: #5cd6c9;
+    --hl-prop: #7dcfff;
+    --hl-lit: #f78fb3;
+}
+
+.theme-toggle {
+    display: inline-grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+}
+
+.theme-toggle:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.theme-toggle:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.theme-toggle svg {
+    display: none;
+    width: 1.2rem;
+    height: 1.2rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+:root:not([data-theme]) .tt-auto,
+:root[data-theme="light"] .tt-light,
+:root[data-theme="dark"] .tt-dark {
+    display: block;
+}
