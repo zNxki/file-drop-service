@@ -2,14 +2,16 @@
     'use strict';
     const $ = (s) => document.querySelector(s);
     const FDC = window.FileDropCrypto;
+    const FD = window.FileDrop;
+    const t = FD.t;
 
     const fmtBytes = (n) => {
         const units = ['B', 'KB', 'MB', 'GB'];
         let i = 0;
         while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-        return n.toLocaleString('it-IT', { maximumFractionDigits: i ? 1 : 0 }) + ' ' + units[i];
+        return n.toLocaleString(FD.tag, { maximumFractionDigits: i ? 1 : 0 }) + ' ' + units[i];
     };
-    const dateFmt = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' });
+    const dateFmt = new Intl.DateTimeFormat(FD.tag, { dateStyle: 'medium', timeStyle: 'short' });
 
     window.FileDrop.page(() => {
         const cleanups = [];
@@ -22,7 +24,7 @@
                 const qr = qrcode(0, 'M');
                 qr.addData(qrBox.dataset.url + (FDC && FDC.validKey(location.hash.slice(1)) ? location.hash : ''));
                 qr.make();
-                $('#share-qr-code').innerHTML = qr.createSvgTag({ cellSize: 4, scalable: true, alt: 'QR code con il link di download' });
+                $('#share-qr-code').innerHTML = qr.createSvgTag({ cellSize: 4, scalable: true, alt: t('js.qr_alt') });
                 qrBox.hidden = false;
             }).catch(() => { });
         }
@@ -51,21 +53,21 @@
                 'application/pdf': 'pdf',
                 'text/plain': 'text', 'text/csv': 'text', 'text/markdown': 'text', 'application/json': 'text',
             };
-            const httpErrors = { 401: 'Inserisci la password.', 403: 'Password errata.', 404: 'File non trovato.', 410: 'Il file non è più disponibile.' };
+            const httpErrors = { 401: t('js.err.401'), 403: t('js.err.403'), 404: t('js.err.404'), 410: t('js.err.410') };
             let loaded = null, objectUrl = null;
             cleanups.push(() => { if (objectUrl) URL.revokeObjectURL(objectUrl); });
 
             const setDisabled = (value) => { submitBtn.disabled = value; previewBtn.disabled = value; };
             const fail = (message) => { errorLine.textContent = message; errorLine.hidden = false; status.textContent = ''; };
             const describe = (err) => {
-                if (err.message === 'nokey') return 'Nel link manca la chiave di cifratura: usa il link completo, comprese le lettere dopo il #.';
-                if (err.status) return httpErrors[err.status] || 'Download non riuscito. Riprova.';
-                if (err.message === 'format' || err.name === 'OperationError') return 'Chiave errata o file danneggiato: non è possibile decifrarlo.';
-                return 'Operazione non riuscita. Riprova.';
+                if (err.message === 'nokey') return t('js.err.nokey');
+                if (err.status) return httpErrors[err.status] || t('js.err.download');
+                if (err.message === 'format' || err.name === 'OperationError') return t('js.err.decrypt');
+                return t('js.err.generic');
             };
 
             if (!FDC.supported()) {
-                fail('La decifratura richiede HTTPS o localhost: apri il link da una connessione sicura.');
+                fail(t('js.err.insecure_decrypt'));
                 setDisabled(true);
             }
 
@@ -74,12 +76,12 @@
                 const encoded = location.hash.slice(1);
                 if (!FDC.validKey(encoded)) throw new Error('nokey');
 
-                status.textContent = 'Scaricamento…';
+                status.textContent = t('js.downloading');
                 const res = await fetch(decryptForm.action, { method: 'POST', body: new FormData(decryptForm) });
                 if (!res.ok) throw Object.assign(new Error('http'), { status: res.status });
                 const buffer = await res.arrayBuffer();
 
-                status.textContent = 'Decifratura…';
+                status.textContent = t('js.decrypting');
                 loaded = await FDC.decrypt(buffer, await FDC.importKey(encoded, 'decrypt'));
                 return loaded;
             };
@@ -93,7 +95,7 @@
                 link.click();
                 link.remove();
                 setTimeout(() => URL.revokeObjectURL(url), 60000);
-                status.textContent = `Fatto: ${name} (${fmtBytes(blob.size)}).`;
+                status.textContent = t('js.done', { name, size: fmtBytes(blob.size) });
             };
 
             const preview = async ({ name, blob }) => {
@@ -106,14 +108,14 @@
                     previewBox.append(box);
                     previewBox.hidden = false;
                     await window.FileDropZipPreview.render(box, window.FileDropZipPreview.fromBlob(blob));
-                    status.textContent = `Anteprima di ${name} (${fmtBytes(blob.size)}).`;
+                    status.textContent = t('js.preview_status', { name, size: fmtBytes(blob.size) });
                     return;
                 }
 
                 const kind = KINDS[blob.type];
                 if (!kind) {
                     previewBox.hidden = true;
-                    fail('Anteprima non disponibile per questo tipo di file.');
+                    fail(t('js.no_preview'));
                     return;
                 }
 
@@ -125,7 +127,7 @@
                     if (blob.size > TEXT_LIMIT) {
                         const note = document.createElement('p');
                         note.className = 'preview-note';
-                        note.textContent = 'Anteprima limitata ai primi 64 KB.';
+                        note.textContent = t('js.preview_limit');
                         previewBox.append(note);
                     }
                 } else {
@@ -134,7 +136,7 @@
                     if (kind === 'image') {
                         el = new Image();
                         el.src = objectUrl;
-                        el.alt = `Anteprima di ${name}`;
+                        el.alt = t('js.preview_of', { name });
                     } else if (kind === 'video') {
                         el = document.createElement('video');
                         el.src = objectUrl;
@@ -147,13 +149,13 @@
                         el.href = objectUrl;
                         el.target = '_blank';
                         el.rel = 'noopener';
-                        el.textContent = 'Apri anteprima PDF';
+                        el.textContent = t('js.open_pdf');
                     }
                     previewBox.append(el);
                 }
 
                 previewBox.hidden = false;
-                status.textContent = `Anteprima di ${name} (${fmtBytes(blob.size)}).`;
+                status.textContent = t('js.preview_status', { name, size: fmtBytes(blob.size) });
             };
 
             const run = async (action) => {
@@ -189,7 +191,7 @@
         if (!cryptoOk) {
             encryptBox.checked = false;
             encryptBox.disabled = true;
-            $('#encrypt-hint').textContent = 'La cifratura nel browser richiede HTTPS o localhost.';
+            $('#encrypt-hint').textContent = t('js.err.insecure_encrypt');
         }
         const zipHint = $('#zip-hint');
         let xhr = null, selected = [], working = false, encryptSignal = null, uploadSignal = null;
@@ -199,7 +201,7 @@
         const sum = (files) => files.reduce((total, f) => total + f.size, 0);
         const busy = () => !!(xhr || working);
 
-        cleanups.push(window.FileDrop.guard(() => (busy() ? 'Caricamento in corso: se esci viene annullato. Uscire dalla pagina?' : null)));
+        cleanups.push(window.FileDrop.guard(() => (busy() ? t('js.leave') : null)));
         const onUnload = (e) => { if (busy()) { e.preventDefault(); e.returnValue = ''; } };
         window.addEventListener('beforeunload', onUnload);
         cleanups.push(() => {
@@ -222,8 +224,8 @@
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'link';
-                remove.textContent = 'Rimuovi';
-                remove.setAttribute('aria-label', `Rimuovi ${file.name}`);
+                remove.textContent = t('js.remove');
+                remove.setAttribute('aria-label', t('js.remove_file', { name: file.name }));
                 remove.addEventListener('click', () => {
                     if (busy()) return;
                     selected.splice(index, 1);
@@ -239,12 +241,12 @@
         const refresh = () => {
             renderList();
             const n = selected.length;
-            $('#drop-title').textContent = n === 0 ? 'Trascina qui uno o più file' : (n === 1 ? selected[0].name : `${n} file selezionati`);
+            $('#drop-title').textContent = n === 0 ? t('js.drop_title') : (n === 1 ? selected[0].name : t('js.drop_selected', { n }));
             $('#drop-hint').textContent = n === 0
-                ? 'oppure fai clic per sceglierli dal dispositivo'
-                : `${fmtBytes(sum(selected))}. Fai clic o trascina per aggiungerne altri.`;
+                ? t('js.drop_hint')
+                : t('js.drop_more', { size: fmtBytes(sum(selected)) });
             drop.classList.toggle('has-file', n > 0);
-            submit.textContent = n > 1 ? `Carica ${n} file` : 'Carica file';
+            submit.textContent = n > 1 ? t('js.submit_many', { n }) : t('js.submit_one');
             submit.disabled = n === 0 || busy();
             zipHint.hidden = !(n > 1 && encryptBox.checked);
         };
@@ -254,7 +256,7 @@
             const next = [...selected];
             for (const file of incoming) {
                 if (file.size === 0) {
-                    showError(`«${file.name}» è vuoto (oppure è una cartella): non può essere caricato.`);
+                    showError(t('js.empty_file', { name: file.name }));
                     return;
                 }
                 if (!next.some((f) => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified)) {
@@ -262,15 +264,13 @@
                 }
             }
             if (next.length > maxFiles) {
-                showError(`Puoi caricare al massimo ${maxFiles} file alla volta.`);
+                showError(t('js.too_many', { max: maxFiles }));
                 return;
             }
             const total = sum(next);
             const limit = next.length > 1 ? Math.min(maxSize, ZIP_LIMIT) : maxSize;
             if (total > limit) {
-                showError(next.length > 1
-                    ? `I file sono troppo grandi: ${fmtBytes(total)} in totale. Il limite è ${fmtBytes(limit)}.`
-                    : `Il file è troppo grande: ${fmtBytes(total)}. Il limite è ${fmtBytes(limit)}.`);
+                showError(t(next.length > 1 ? 'js.too_big_many' : 'js.too_big_one', { total: fmtBytes(total), limit: fmtBytes(limit) }));
                 return;
             }
             selected = next;
@@ -292,7 +292,7 @@
             fill.style.width = value + '%';
             bar.setAttribute('aria-valuenow', String(value));
             bar.classList.toggle('is-indeterminate', indeterminate);
-            pct.textContent = indeterminate ? 'Elaborazione…' : value + '%';
+            pct.textContent = indeterminate ? t('js.processing') : value + '%';
         };
 
         const setBusy = (busy) => {
@@ -351,7 +351,7 @@
                 const res = await call('POST', '/api/uploads', {
                     json: { files: items.map((i) => ({ name: i.name, size: i.blob.size })), encrypted },
                 });
-                if (res.status !== 201) throw failure(res, 'Impossibile avviare il caricamento.');
+                if (res.status !== 201) throw failure(res, t('js.start_failed'));
                 session = res.json.data;
                 if (key) remember(key, session.id);
             }
@@ -365,9 +365,9 @@
                 setProgress(Math.min(100, Math.round((sent / total) * 100)));
                 const rate = (sent - base) / Math.max(0.25, (performance.now() - started) / 1000);
                 const eta = rate > 0 ? Math.ceil((total - sent) / rate) : 0;
-                speed.textContent = rate > 0 ? `${fmtBytes(rate)}/s` + (eta > 1 ? `, ancora ${eta} s` : '') : '';
+                speed.textContent = rate > 0 ? t(eta > 1 ? 'js.speed_eta' : 'js.speed', { rate: fmtBytes(rate), eta }) : '';
             };
-            if (base > 0) speed.textContent = `Ripresa da ${fmtBytes(base)}…`;
+            if (base > 0) speed.textContent = t('js.resuming', { size: fmtBytes(base) });
             report(0);
 
             for (let index = 0; index < items.length; index++) {
@@ -392,18 +392,18 @@
                             }
                             if (res.status === 404) {
                                 remember(key, null);
-                                throw failure(res, 'Il caricamento non esiste più sul server: riprova.');
+                                throw failure(res, t('js.upload_gone'));
                             }
                             if (![408, 409, 429, 500, 502, 503, 504].includes(res.status)) {
-                                throw failure(res, 'Caricamento non riuscito. Riprova.');
+                                throw failure(res, t('js.upload_failed'));
                             }
                         } catch (err) {
                             if (err.aborted || !err.network) throw err;
                         }
                         if (++attempt > CHUNK_RETRIES) {
-                            throw new Error('Connessione interrotta. Riseleziona gli stessi file per riprendere il caricamento da dove si era fermato.');
+                            throw new Error(t('js.connection_lost'));
                         }
-                        speed.textContent = `Connessione instabile, nuovo tentativo ${attempt}/${CHUNK_RETRIES}…`;
+                        speed.textContent = t('js.retrying', { attempt, max: CHUNK_RETRIES });
                         await wait(Math.min(15000, 500 * 2 ** attempt));
                         if (signal.aborted) throw Object.assign(new Error('abort'), { aborted: true });
                         const status = await call('GET', `/api/uploads/${session.id}`).catch((err) => {
@@ -417,7 +417,7 @@
                             if (fresh !== offset) break;
                         } else if (status && status.status === 404) {
                             remember(key, null);
-                            throw failure(status, 'Il caricamento non esiste più sul server: riprova.');
+                            throw failure(status, t('js.upload_gone'));
                         }
                     }
                 }
@@ -426,7 +426,7 @@
             setProgress(100, true);
             speed.textContent = '';
             const res = await call('POST', `/api/uploads/${session.id}/complete`, { body: options });
-            if (res.status !== 201 || !res.json || !res.json.data) throw failure(res, 'Caricamento non riuscito. Riprova.');
+            if (res.status !== 201 || !res.json || !res.json.data) throw failure(res, t('js.upload_failed'));
             if (key) remember(key, null);
             return res.json;
         };
@@ -440,7 +440,7 @@
             const multiple = files.length > 1;
             const data = new FormData(form);
             data.delete('encrypt');
-            const local = { name: multiple ? `${files.length} file` : files[0].name, size: sum(files) };
+            const local = { name: multiple ? t('js.files_count', { n: files.length }) : files[0].name, size: sum(files) };
             let keyCode = null;
             working = true;
             setBusy(true);
@@ -452,12 +452,12 @@
                 try {
                     let source = files[0];
                     if (multiple) {
-                        speed.textContent = 'Preparazione dell\'archivio…';
+                        speed.textContent = t('js.preparing_zip');
                         const zip = await FDZ.build(files, (f) => setProgress(Math.round(f * 100)), encryptSignal);
-                        source = new File([zip], 'archivio.zip', { type: 'application/zip' });
+                        source = new File([zip], t('js.archive_name'), { type: 'application/zip' });
                         setProgress(0);
                     }
-                    speed.textContent = 'Cifratura nel browser…';
+                    speed.textContent = t('js.encrypting');
                     const k = await FDC.newKey();
                     const blob = await FDC.encrypt(source, k.key, (f) => setProgress(Math.round(f * 100)), encryptSignal);
                     data.set('file', new File([blob], 'encrypted.bin', { type: 'application/octet-stream' }));
@@ -468,7 +468,7 @@
                     encryptSignal = null;
                     working = false;
                     setBusy(false);
-                    showError(cancelled ? 'Caricamento annullato.' : 'Cifratura non riuscita. Riprova.');
+                    showError(cancelled ? t('js.cancelled') : t('js.encrypt_failed'));
                     return;
                 }
                 encryptSignal = null;
@@ -490,9 +490,7 @@
                 const json = await uploadChunked(items, !!keyCode, options, uploadSignal);
                 showResult(json.data, keyCode ? { key: keyCode, ...local } : null);
             } catch (err) {
-                showError(err.aborted
-                    ? 'Caricamento annullato. Riseleziona gli stessi file per riprenderlo da dove si era fermato.'
-                    : err.message || 'Caricamento non riuscito. Riprova.');
+                showError(err.aborted ? t('js.cancelled_resume') : err.message || t('js.upload_failed'));
             } finally {
                 uploadSignal = null;
                 xhr = null;
@@ -515,12 +513,15 @@
             $('#code').textContent = d.code;
             $('#share-url').value = secret ? `${d.url}#${secret.key}` : d.url;
             const notes = [];
-            if (secret) notes.push('cifrato nel browser');
-            if (d.protected) notes.push('protetto da password');
-            if (d.max_downloads) notes.push(d.max_downloads === 1 ? 'si elimina dopo il primo download' : `si elimina dopo ${d.max_downloads} download`);
-            $('#result-meta').textContent =
-                `${secret ? secret.name : (d.item_count > 1 ? `${d.item_count} file` : d.name)}${d.item_count > 1 && !secret ? ' (.zip)' : ''}, ${fmtBytes(secret ? secret.size : d.size)}. Scade il ${dateFmt.format(new Date(d.expires_at))}` +
-                (notes.length ? ', ' + notes.join(', ') + '.' : '.');
+            if (secret) notes.push(t('js.note.encrypted'));
+            if (d.protected) notes.push(t('js.note.protected'));
+            if (d.max_downloads) notes.push(d.max_downloads === 1 ? t('js.note.once') : t('js.note.many', { n: d.max_downloads }));
+            $('#result-meta').textContent = t('js.result', {
+                name: `${secret ? secret.name : (d.item_count > 1 ? t('js.files_count', { n: d.item_count }) : d.name)}${d.item_count > 1 && !secret ? ' (.zip)' : ''}`,
+                size: fmtBytes(secret ? secret.size : d.size),
+                date: dateFmt.format(new Date(d.expires_at)),
+                notes: notes.length ? ', ' + notes.join(', ') : '',
+            });
             form.hidden = true;
             result.hidden = false;
             $('#copy').focus();
@@ -528,14 +529,15 @@
 
         $('#copy').addEventListener('click', async (e) => {
             const field = $('#share-url');
+            const button = e.currentTarget;
             try {
                 await navigator.clipboard.writeText(field.value);
             } catch (_) {
                 field.select();
                 document.execCommand('copy');
             }
-            e.currentTarget.textContent = 'Link copiato';
-            setTimeout(() => { e.currentTarget.textContent = 'Copia link'; }, 2000);
+            button.textContent = t('js.copied');
+            setTimeout(() => { button.textContent = t('js.copy'); }, 2000);
         });
         $('#share-url').addEventListener('focus', (e) => e.target.select());
 
@@ -549,13 +551,13 @@
         });
 
         $('#delete').addEventListener('click', async () => {
-            if (!uploaded || !confirm('Eliminare il file? Il codice smetterà di funzionare.')) return;
+            if (!uploaded || !confirm(t('js.confirm_delete'))) return;
             const res = await fetch('/api/files/' + uploaded.code, { method: 'DELETE', headers: { 'X-Delete-Token': uploaded.delete_token } });
             if (res.ok) {
                 $('#again').click();
-                showError('File eliminato.');
+                showError(t('js.deleted'));
             } else {
-                alert('Non è stato possibile eliminare il file.');
+                alert(t('js.delete_failed'));
             }
         });
 

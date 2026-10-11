@@ -49,7 +49,7 @@ final class RateLimiter
             $retry = max(1, $start + $window - $now);
             throw new HttpException(
                 429,
-                sprintf('Troppe richieste. Riprova tra %d %s.', $retry, $retry === 1 ? 'secondo' : 'secondi'),
+                I18n::plural('err.rate', $retry),
                 ['Retry-After' => (string) $retry]
             );
         }

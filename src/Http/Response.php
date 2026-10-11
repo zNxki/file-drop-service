@@ -41,6 +41,20 @@ final class Response
         return new self($status, ['Location' => $url], '');
     }
 
+    public function withHeader(string $name, string $value): self
+    {
+        return new self(
+            $this->status,
+            [$name => $value] + $this->headers,
+            $this->body,
+            $this->stream,
+            $this->offset,
+            $this->length,
+            $this->onSent,
+            $this->chunks,
+        );
+    }
+
     public static function download($handle, string $name, string $mime, int $size, ?\Closure $onSent = null): self
     {
         return new self(200, [

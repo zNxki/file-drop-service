@@ -1,0 +1,485 @@
+/* Selettore lingua: menu a tendina con bandiere, ricerca e animazioni */
+
+.lp {
+    position: relative;
+}
+
+.lp svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.lp .flag {
+    display: block;
+    width: 100%;
+    height: 100%;
+    stroke: none;
+}
+
+.lp-flag {
+    flex: none;
+    width: 1.55rem;
+    height: 1.03rem;
+    overflow: hidden;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent), 0 2px 5px -2px rgba(14, 26, 43, 0.35);
+    transition: transform 0.45s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+.lp .flag-none {
+    color: var(--slate);
+}
+
+/* --- pulsante --- */
+
+.lp-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    padding: 0 0.7rem 0 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, box-shadow 0.25s, transform 0.2s var(--ease-out, ease);
+}
+
+.lp-trigger:hover,
+.lp.is-open .lp-trigger {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.lp-trigger:hover .lp-flag {
+    transform: rotate(-6deg) scale(1.1);
+}
+
+.lp-trigger:active {
+    transform: scale(0.96);
+}
+
+.lp.is-open .lp-trigger {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.lp-trigger:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.lp-chev {
+    width: 0.95rem;
+    height: 0.95rem;
+    transition: transform 0.4s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+.lp.is-open .lp-chev {
+    transform: rotate(180deg);
+}
+
+/* --- pannello --- */
+
+.lp-panel {
+    position: absolute;
+    top: calc(100% + 0.6rem);
+    right: 0;
+    z-index: 60;
+    width: min(19rem, calc(100vw - 2rem));
+    padding: 0.55rem;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--paper) 95%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    backdrop-filter: blur(18px) saturate(1.4);
+    box-shadow: var(--shadow-lg);
+    transform-origin: calc(100% - 1.6rem) 0;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.92);
+    transition:
+        opacity 0.22s ease,
+        transform 0.3s var(--ease-out, ease),
+        visibility 0s linear 0.3s;
+}
+
+.lp.is-open .lp-panel {
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+    transition:
+        opacity 0.2s ease,
+        transform 0.45s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)),
+        visibility 0s;
+}
+
+.lp-backdrop,
+.lp-grab {
+    display: none;
+}
+
+/* --- ricerca --- */
+
+.lp-search {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.55rem 0 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg);
+    color: var(--slate);
+    transition: border-color 0.2s, box-shadow 0.25s, background 0.2s;
+}
+
+.lp-search:focus-within {
+    border-color: var(--accent);
+    background: var(--paper);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+}
+
+.lp-search>svg {
+    flex: none;
+    width: 1.05rem;
+    height: 1.05rem;
+}
+
+.lp-search input {
+    flex: 1;
+    min-width: 0;
+    height: 2.4rem;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.95rem;
+    box-shadow: none;
+}
+
+.lp-search input::placeholder {
+    color: var(--slate);
+    opacity: 0.85;
+}
+
+.lp-clear {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 1.4rem;
+    height: 1.4rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--slate) 22%, transparent);
+    color: var(--ink);
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.4);
+    pointer-events: none;
+    transition: opacity 0.18s, transform 0.3s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+.lp-clear svg {
+    width: 0.8rem;
+    height: 0.8rem;
+    stroke-width: 2.4;
+}
+
+.lp-search.has-value .lp-clear {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
+
+/* --- elenco --- */
+
+.lp-scroll {
+    position: relative;
+    max-height: min(18.5rem, 55vh);
+    margin-top: 0.45rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+}
+
+.lp-list {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.lp-list li[hidden] {
+    display: none;
+}
+
+.lp-hl {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    width: 100%;
+    height: 0;
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform 0.32s var(--ease-out, ease),
+        height 0.25s var(--ease-out, ease),
+        opacity 0.2s;
+}
+
+.lp-hl.on {
+    opacity: 1;
+}
+
+.lp-opt {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 11px;
+    color: var(--ink);
+    text-decoration: none;
+    outline: 0;
+}
+
+.lp-opt .lp-flag {
+    width: 1.9rem;
+    height: 1.27rem;
+}
+
+.lp-names {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    line-height: 1.2;
+}
+
+.lp-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.lp-sub {
+    margin-top: 0.1rem;
+    color: var(--slate);
+    font-size: 0.76rem;
+}
+
+.lp-tag {
+    color: var(--slate);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    transition: opacity 0.2s, transform 0.25s var(--ease-out, ease);
+}
+
+.lp-check {
+    position: absolute;
+    right: 0.65rem;
+    width: 1.15rem;
+    height: 1.15rem;
+    padding: 0.18rem;
+    box-sizing: content-box;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--on-accent);
+    stroke-width: 3;
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+    opacity: 0;
+    transform: scale(0.4);
+}
+
+.lp-opt[aria-selected="true"] .lp-tag {
+    opacity: 0;
+    transform: translateX(6px);
+}
+
+.lp-opt[aria-selected="true"] .lp-name {
+    color: var(--accent);
+}
+
+.lp-opt[aria-selected="true"] .lp-check {
+    opacity: 1;
+    transform: none;
+    transition:
+        opacity 0.2s,
+        transform 0.4s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) 0.1s;
+}
+
+.lp.is-open .lp-opt[aria-selected="true"] .lp-check {
+    animation: lp-draw 0.45s 0.25s ease forwards;
+}
+
+.lp-opt.is-active .lp-flag {
+    transform: scale(1.12) rotate(-4deg);
+}
+
+.lp-opt:active {
+    transform: scale(0.98);
+}
+
+/* ingresso a cascata ad ogni apertura / filtro */
+.lp.is-open .lp-list li:not([hidden]) .lp-opt {
+    animation: lp-in 0.42s var(--ease-out, ease) both;
+    animation-delay: calc(var(--n, 0) * 38ms + 60ms);
+}
+
+.lp-empty {
+    margin: 0;
+    padding: 1.4rem 0.5rem 1.2rem;
+    color: var(--slate);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.lp-empty:not([hidden]) {
+    animation: lp-in 0.35s var(--ease-out, ease) both;
+}
+
+.lp-empty::before {
+    content: "";
+    display: block;
+    width: 2.2rem;
+    height: 2.2rem;
+    margin: 0 auto 0.6rem;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 50% 50%, transparent 0 38%, currentColor 39% 45%, transparent 46%) center / 100% 100%,
+        linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat,
+        linear-gradient(currentColor, currentColor) center / 2px 100% no-repeat;
+    border: 2px solid currentColor;
+    opacity: 0.35;
+    animation: lp-spin 6s linear infinite;
+}
+
+@keyframes lp-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.97);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes lp-draw {
+    from {
+        stroke-dashoffset: 24;
+    }
+
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes lp-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* cambio bandiera sul pulsante */
+.lp-trigger.is-switching .lp-flag {
+    animation: lp-flip 0.5s var(--ease-out, ease);
+}
+
+@keyframes lp-flip {
+    50% {
+        transform: rotateY(90deg) scale(0.8);
+    }
+}
+
+/* --- mobile: bottom sheet --- */
+
+@media (max-width: 520px) {
+    .lp-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 59;
+        background: rgba(8, 14, 24, 0.5);
+        -webkit-backdrop-filter: blur(3px);
+        backdrop-filter: blur(3px);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s, visibility 0s linear 0.3s;
+    }
+
+    .lp.is-open .lp-backdrop {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 0.3s, visibility 0s;
+    }
+
+    .lp-panel {
+        position: fixed;
+        top: auto;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        width: auto;
+        padding: 0.4rem 0.9rem calc(1rem + env(safe-area-inset-bottom));
+        border-width: 1px 0 0;
+        border-radius: 22px 22px 0 0;
+        background: var(--paper);
+        transform-origin: 50% 100%;
+        transform: translateY(100%);
+    }
+
+    .lp.is-open .lp-panel {
+        transform: none;
+    }
+
+    .lp-grab {
+        display: block;
+        width: 2.6rem;
+        height: 0.3rem;
+        margin: 0.2rem auto 0.8rem;
+        border-radius: 999px;
+        background: var(--line);
+    }
+
+    .lp-scroll {
+        max-height: 50vh;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lp-hl {
+        transition: none;
+    }
+}
+
+@media (max-width: 520px) {
+    html.lp-lock {
+        overflow: hidden;
+    }
+}
+
+/* l'intestazione deve stare sopra al contenuto animato della pagina */
+.top {
+    position: relative;
+    z-index: 70;
+}

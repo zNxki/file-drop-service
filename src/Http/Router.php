@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace FileDrop\Http;
 
 use FileDrop\Exception\HttpException;
+use FileDrop\Support\I18n;
 
 final class Router
 {
@@ -31,8 +32,8 @@ final class Router
         }
 
         if ($allowed) {
-            throw new HttpException(405, 'Metodo non consentito.');
+            throw new HttpException(405, I18n::t('err.method'));
         }
-        throw new HttpException(404, 'Pagina non trovata.');
+        throw new HttpException(404, I18n::t('err.not_found_page'));
     }
 }

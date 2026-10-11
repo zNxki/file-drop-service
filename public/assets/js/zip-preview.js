@@ -1,6 +1,8 @@
 (() => {
     'use strict';
 
+    const t = (key, params) => (window.FileDrop ? window.FileDrop.t(key, params) : key);
+    const tag = () => (window.FileDrop && window.FileDrop.tag) || 'en';
     const TEXT_LIMIT = 65536;
     const MEDIA_LIMIT = 25 * 1024 * 1024;
     const DIR_LIMIT = 8 * 1024 * 1024;
@@ -14,7 +16,7 @@
         const units = ['B', 'KB', 'MB', 'GB'];
         let i = 0;
         while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-        return n.toLocaleString('it-IT', { maximumFractionDigits: i ? 1 : 0 }) + ' ' + units[i];
+        return n.toLocaleString(tag(), { maximumFractionDigits: i ? 1 : 0 }) + ' ' + units[i];
     };
 
     const el = (tag, cls, text) => {
@@ -33,27 +35,27 @@
         size,
         read: async (s, e) => {
             const res = await fetch(url, { headers: { Range: `bytes=${s}-${e - 1}` }, credentials: 'same-origin' });
-            if (!res.ok) throw new Error('Impossibile leggere l\'archivio.');
+            if (!res.ok) throw new Error(t('js.zip.read_fail'));
             const buf = new Uint8Array(await res.arrayBuffer());
             return res.status === 200 ? buf.slice(s, e) : buf;
         },
     });
 
     const readDirectory = async (src) => {
-        if (src.size < 22) throw new Error('Archivio zip non valido.');
+        if (src.size < 22) throw new Error(t('js.zip.invalid'));
         const tail = await src.read(Math.max(0, src.size - 65557), src.size);
         const tv = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
         let p = tail.length - 22;
         while (p >= 0 && tv.getUint32(p, true) !== 0x06054B50) p--;
-        if (p < 0) throw new Error('Archivio zip non valido.');
+        if (p < 0) throw new Error(t('js.zip.invalid'));
 
         const count = tv.getUint16(p + 10, true);
         const cdSize = tv.getUint32(p + 12, true);
         const cdOff = tv.getUint32(p + 16, true);
         if (count === 0xFFFF || cdSize === 0xFFFFFFFF || cdOff === 0xFFFFFFFF) {
-            throw new Error('Gli archivi ZIP64 non hanno ancora l\'anteprima.');
+            throw new Error(t('js.zip.zip64'));
         }
-        if (cdSize > DIR_LIMIT) throw new Error('L\'elenco dei file è troppo grande per l\'anteprima.');
+        if (cdSize > DIR_LIMIT) throw new Error(t('js.zip.dir_big'));
 
         const cd = await src.read(cdOff, cdOff + cdSize);
         const dv = new DataView(cd.buffer, cd.byteOffset, cd.byteLength);
@@ -111,7 +113,7 @@
     const readEntry = async (src, entry, limit, readCap) => {
         const lh = await src.read(entry.offset, entry.offset + 30);
         const v = new DataView(lh.buffer, lh.byteOffset, lh.byteLength);
-        if (lh.length < 30 || v.getUint32(0, true) !== 0x04034B50) throw new Error('Voce dell\'archivio danneggiata.');
+        if (lh.length < 30 || v.getUint32(0, true) !== 0x04034B50) throw new Error(t('js.zip.entry_corrupt'));
         const start = entry.offset + 30 + v.getUint16(26, true) + v.getUint16(28, true);
         if (entry.method === 0) return src.read(start, start + Math.min(entry.csize, limit));
         const data = await src.read(start, start + Math.min(entry.csize, readCap));
@@ -150,14 +152,14 @@
 
     const render = async (host, src) => {
         host.hidden = false;
-        host.replaceChildren(el('p', 'preview-note', 'Lettura dell\'archivio…'));
+        host.replaceChildren(el('p', 'preview-note', t('js.zip.reading')));
 
         let archive;
         try {
-            if (typeof DecompressionStream === 'undefined') throw new Error('Il browser non supporta l\'anteprima degli zip.');
+            if (typeof DecompressionStream === 'undefined') throw new Error(t('js.zip.unsupported_browser'));
             archive = await open(src);
         } catch (err) {
-            host.replaceChildren(el('p', 'preview-note', err.message || 'Impossibile leggere l\'archivio.'));
+            host.replaceChildren(el('p', 'preview-note', err.message || t('js.zip.read_fail')));
             return;
         }
 
@@ -169,7 +171,7 @@
         const viewer = el('div', 'zp-viewer');
         let current = null, objectUrl = null, seq = 0;
 
-        const placeholder = () => viewer.replaceChildren(el('p', 'preview-note', 'Seleziona un file per vedere l\'anteprima.'));
+        const placeholder = () => viewer.replaceChildren(el('p', 'preview-note', t('js.zip.select')));
 
         const show = async (entry, button) => {
             if (current) current.removeAttribute('aria-current');
@@ -187,26 +189,26 @@
             const note = (text) => setBody(el('p', 'preview-note', text));
 
             try {
-                if (entry.flags & 1) return note('Il file è protetto da password: anteprima non disponibile.');
-                if (entry.method !== 0 && entry.method !== 8) return note('Compressione non supportata per l\'anteprima.');
-                if (entry.size === 0) return note('File vuoto.');
+                if (entry.flags & 1) return note(t('js.zip.encrypted'));
+                if (entry.method !== 0 && entry.method !== 8) return note(t('js.zip.method'));
+                if (entry.size === 0) return note(t('js.zip.empty'));
                 const { kind, mime } = kindOf(entry.name);
-                if (kind === 'none') return note('Anteprima non disponibile per questo tipo di file.');
+                if (kind === 'none') return note(t('js.no_preview'));
 
                 if (kind === 'text') {
                     const bytes = await archive.read(entry, TEXT_LIMIT, TEXT_READ);
                     if (token !== seq) return;
-                    if (bytes.subarray(0, 4096).includes(0)) return note('File binario: anteprima non disponibile.');
+                    if (bytes.subarray(0, 4096).includes(0)) return note(t('js.zip.binary'));
                     const text = new TextDecoder('utf-8').decode(bytes);
                     const pre = el('pre', 'preview-text');
                     const colored = window.FileDropHighlight && window.FileDropHighlight.render(text, entry.name);
                     if (colored) pre.append(colored); else pre.textContent = text;
                     const nodes = [pre];
-                    if (entry.size > TEXT_LIMIT) nodes.push(el('p', 'preview-note', 'Anteprima limitata ai primi 64 KB.'));
+                    if (entry.size > TEXT_LIMIT) nodes.push(el('p', 'preview-note', t('js.preview_limit')));
                     return setBody(...nodes);
                 }
 
-                if (entry.size > MEDIA_LIMIT || entry.csize > MEDIA_LIMIT) return note('File troppo grande per l\'anteprima (oltre 25 MB).');
+                if (entry.size > MEDIA_LIMIT || entry.csize > MEDIA_LIMIT) return note(t('js.zip.too_big'));
                 const bytes = await archive.read(entry, MEDIA_LIMIT, MEDIA_LIMIT);
                 if (token !== seq) return;
                 objectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
@@ -214,7 +216,7 @@
                 if (kind === 'image') {
                     node = new Image();
                     node.src = objectUrl;
-                    node.alt = `Anteprima di ${entry.name}`;
+                    node.alt = t('js.preview_of', { name: entry.name });
                 } else if (kind === 'video') {
                     node = el('video');
                     node.src = objectUrl;
@@ -222,21 +224,21 @@
                     node.preload = 'metadata';
                     node.playsInline = true;
                 } else {
-                    node = el('a', 'btn btn-small', 'Apri anteprima PDF');
+                    node = el('a', 'btn btn-small', t('js.open_pdf'));
                     node.href = objectUrl;
                     node.target = '_blank';
                     node.rel = 'noopener';
                 }
                 setBody(node);
             } catch (err) {
-                note('Impossibile leggere questo file dall\'archivio.');
+                note(t('js.zip.entry_read'));
             }
         };
 
         const list = (node, level) => {
             const ul = el('ul', 'zp-list');
             ul.setAttribute('role', level === 0 ? 'tree' : 'group');
-            const children = [...node.children.values()].sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name, 'it', { numeric: true }));
+            const children = [...node.children.values()].sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name, tag(), { numeric: true }));
             for (const child of children) {
                 const li = el('li');
                 li.setAttribute('role', 'treeitem');
@@ -266,12 +268,12 @@
         };
 
         tree.append(list(root, 0));
-        const summary = el('p', 'preview-note zp-summary', `${files.length} ${files.length === 1 ? 'file' : 'file'} · ${fmtBytes(total)} decompressi`);
+        const summary = el('p', 'preview-note zp-summary', t('js.zip.summary', { n: files.length, size: fmtBytes(total) }));
         const grid = el('div', 'zp-grid');
         grid.append(tree, viewer);
         placeholder();
 
-        const expandBtn = el('button', 'btn btn-secondary btn-small', 'Allarga');
+        const expandBtn = el('button', 'btn btn-secondary btn-small', t('js.zip.expand'));
         expandBtn.type = 'button';
         expandBtn.setAttribute('aria-expanded', 'false');
         const toolbar = el('div', 'zp-toolbar');
@@ -287,7 +289,7 @@
             overlay = marker = null;
             host.classList.remove('is-expanded');
             document.documentElement.classList.remove('zp-lock');
-            expandBtn.textContent = 'Allarga';
+            expandBtn.textContent = t('js.zip.expand');
             expandBtn.setAttribute('aria-expanded', 'false');
             expandBtn.focus();
         };
@@ -297,7 +299,7 @@
             overlay = el('div', 'zp-overlay');
             overlay.setAttribute('role', 'dialog');
             overlay.setAttribute('aria-modal', 'true');
-            overlay.setAttribute('aria-label', 'Anteprima archivio');
+            overlay.setAttribute('aria-label', t('js.zip.label'));
             overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) collapse(); });
             host.classList.add('is-expanded');
             overlay.append(host);
@@ -305,7 +307,7 @@
             document.documentElement.classList.add('zp-lock');
             document.addEventListener('keydown', onKey);
             if (window.FileDrop) window.FileDrop.cleanup(collapse); // se si cambia pagina con l'anteprima allargata
-            expandBtn.textContent = 'Chiudi';
+            expandBtn.textContent = t('js.zip.close');
             expandBtn.setAttribute('aria-expanded', 'true');
             expandBtn.focus();
         };

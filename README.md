@@ -86,6 +86,24 @@ Tutte le impostazioni sono nel file `.env`.
 >
 > Con più file conta anche `max_file_uploads` (default PHP: 20), che deve restare **sopra** `MAX_FILES`. Oltre quel limite PHP scarta i file in eccesso senza dare errori, quindi l'app accetta al massimo `max_file_uploads - 1` file: una richiesta troncata viene rifiutata invece di perdere file in silenzio.
 
+## Lingue (i18n)
+
+Le pagine pubbliche vivono sotto un prefisso di lingua: `/it`, `/en`, `/de`. Chi apre un URL senza prefisso (per esempio `/` o un vecchio link `/d/8Kf2a`) viene reindirizzato alla lingua scelta in precedenza (cookie `fd-lang`) o, in mancanza, a quella del browser (`Accept-Language`), altrimenti alla lingua predefinita. Il frammento `#chiave` dei link cifrati viene conservato dal browser durante il reindirizzamento, anche cambiando lingua dal selettore. I link di condivisione restano senza prefisso, così ognuno li apre nella propria lingua.
+
+`/admin`, `/api` e `/assets` non hanno prefisso. Il pannello `/admin` resta in italiano; i messaggi di errore dell'API seguono il cookie o `Accept-Language`.
+
+### Aggiungere una lingua
+
+1. Aggiungi una riga in `config/locales.php`:
+
+   ```php
+   'fr' => ['name' => 'Français', 'english' => 'French', 'flag' => 'fr', 'tag' => 'fr-FR', 'decimal' => ',', 'thousands' => ' ', 'datetime' => 'd/m/Y H:i'],
+   ```
+
+2. Copia `lang/en.php` in `lang/fr.php` e traduci i valori. Le chiavi `js.*` sono inviate anche al browser. I segnaposto `{nome}` vanno lasciati invariati e le forme plurali sono `chiave.one` e `chiave.other`.
+
+`english` (nome inglese, usato dalla ricerca) e `flag` (codice paese della bandiera, vedi `src/Support/Flags.php`; se manca compare un globo) sono facoltativi. Il selettore nell'intestazione (menu a tendina con bandiere e barra di ricerca, `lang-picker.js` / `lang-picker.css`), i tag `hreflang` e il routing si aggiornano da soli. Una chiave mancante usa il testo della lingua predefinita (`default` in `config/locales.php`).
+
 ## Amministrazione
 
 Il pannello è su `/admin`. La password non si imposta nel `.env`: al primo avvio, aprendo `/admin`, compare la configurazione iniziale in cui scegli nome utente e **master password** dell'amministratore (almeno 10 caratteri). Finché non l'hai creata, chiunque raggiunga il sito può farlo: completa il passaggio subito dopo il deploy.

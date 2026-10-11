@@ -95,3 +95,9 @@
 :root[data-theme="dark"] .tt-dark {
     display: block;
 }
+
+.top-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+}

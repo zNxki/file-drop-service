@@ -8,16 +8,17 @@ use FileDrop\Http\Request;
 use FileDrop\Http\Response;
 use FileDrop\Service\FileService;
 use FileDrop\Support\Config;
+use FileDrop\Support\I18n;
 use FileDrop\Support\Preview;
 use FileDrop\Support\View;
 
 final class WebController extends Controller
 {
     private const EXPIRY_PRESETS = [
-        3600 => '1 ora',
-        86400 => '24 ore',
-        604800 => '7 giorni',
-        2592000 => '30 giorni',
+        3600 => ['hours', 1],
+        86400 => ['hours', 24],
+        604800 => ['days', 7],
+        2592000 => ['days', 30],
     ];
 
     public function __construct(FileService $files, Config $config, private readonly View $view)
@@ -27,8 +28,13 @@ final class WebController extends Controller
 
     public function home(Request $request): Response
     {
-        $options = array_filter(self::EXPIRY_PRESETS, fn(int $s) => $s <= $this->config->maxExpiry, ARRAY_FILTER_USE_KEY);
-        $options[$this->config->defaultExpiry] ??= $this->humanDuration($this->config->defaultExpiry);
+        $options = [];
+        foreach (self::EXPIRY_PRESETS as $seconds => [$unit, $count]) {
+            if ($seconds <= $this->config->maxExpiry) {
+                $options[$seconds] = I18n::plural('duration.' . $unit, $count);
+            }
+        }
+        $options[$this->config->defaultExpiry] ??= I18n::duration($this->config->defaultExpiry);
         ksort($options);
 
         return Response::html($this->view->render('home', [
@@ -54,7 +60,7 @@ final class WebController extends Controller
         $password = $request->method === 'POST' ? ($request->post['password'] ?? null) : null;
 
         if ($file->isProtected() && $request->method === 'GET') {
-            return Response::redirect('/d/' . $file->code);
+            return Response::redirect($this->view->url('/d/' . $file->code));
         }
 
         try {
@@ -71,7 +77,7 @@ final class WebController extends Controller
         $file = $this->files->get($params['code']);
         $kind = $file->previewKind();
         if ($kind === null) {
-            throw new HttpException(404, 'Anteprima non disponibile per questo file.');
+            throw new HttpException(404, I18n::t('err.preview_unavailable'));
         }
 
         return Response::inline(
@@ -87,7 +93,7 @@ final class WebController extends Controller
     public function error(HttpException $e): Response
     {
         return Response::html($this->view->render('error', [
-            'title' => 'Errore ' . $e->status . ' · File Drop',
+            'title' => I18n::t('error.title', ['status' => $e->status]),
             'script' => false,
             'status' => $e->status,
             'message' => $e->getMessage(),
@@ -104,10 +110,5 @@ final class WebController extends Controller
             'error' => $error,
             'shareUrl' => $this->baseUrl($request) . '/d/' . $file->code,
         ]), $status);
-    }
-
-    private function humanDuration(int $seconds): string
-    {
-        return $seconds % 86400 === 0 ? ($seconds / 86400) . ' giorni' : ($seconds % 3600 === 0 ? ($seconds / 3600) . ' ore' : $seconds . ' secondi');
     }
 }

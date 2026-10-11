@@ -14,6 +14,9 @@ final class View
     ];
 
     private bool $fragment = false;
+    private bool $localized = false;
+    private string $path = '/';
+    private string $origin = '';
 
     public function __construct(private readonly string $dir)
     {
@@ -22,6 +25,100 @@ final class View
     public function fragment(bool $on = true): void
     {
         $this->fragment = $on;
+    }
+
+    public function localize(string $path, string $origin = ''): void
+    {
+        $this->localized = true;
+        $this->path = $path;
+        $this->origin = $origin;
+    }
+
+    public function locales(): array
+    {
+        return I18n::locales();
+    }
+
+    public function flag(array $info): string
+    {
+        return Flags::svg((string) ($info['flag'] ?? ''));
+    }
+
+    public function alternate(string $code): string
+    {
+        return $this->origin . $this->switchUrl($code);
+    }
+
+    public function localized(): bool
+    {
+        return $this->localized;
+    }
+
+    public function lang(): string
+    {
+        return I18n::current();
+    }
+
+    public function url(string $path = '/'): string
+    {
+        if (!$this->localized) {
+            return $path;
+        }
+
+        return '/' . I18n::current() . ($path === '/' ? '' : $path);
+    }
+
+    public function switchUrl(string $code): string
+    {
+        return '/' . $code . ($this->path === '/' ? '' : $this->path);
+    }
+
+    public function raw(string $key, array $params = []): string
+    {
+        return I18n::t($key, $params);
+    }
+
+    public function defaultLocale(): string
+    {
+        return I18n::default();
+    }
+
+    public function t(string $key, array $params = []): string
+    {
+        return $this->e(I18n::t($key, $params));
+    }
+
+    public function tn(string $key, int $count, array $params = []): string
+    {
+        return $this->e(I18n::plural($key, $count, $params));
+    }
+
+    public function th(string $key, array $html): string
+    {
+        $map = [];
+        foreach ($html as $name => $value) {
+            $map['{' . $name . '}'] = (string) $value;
+        }
+
+        return strtr($this->e(I18n::t($key)), $map);
+    }
+
+    public function words(string $text, int &$index): string
+    {
+        $out = [];
+        foreach (preg_split('/\s+/u', trim($text)) ?: [] as $word) {
+            $out[] = sprintf('<span class="w" style="--i:%d">%s</span>', $index++, $this->e($word));
+        }
+
+        return implode(' ', $out);
+    }
+
+    public function i18nJson(): string
+    {
+        return json_encode(
+            ['lang' => I18n::current(), 'tag' => I18n::setting('tag'), 'messages' => I18n::client()],
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_THROW_ON_ERROR,
+        );
     }
 
     public function render(string $template, array $data = []): string
@@ -58,7 +155,7 @@ final class View
 
     public function number(int $n): string
     {
-        return number_format($n, 0, ',', '.');
+        return number_format($n, 0, I18n::setting('decimal'), I18n::setting('thousands'));
     }
 
     public function time(int $timestamp): string
@@ -66,7 +163,7 @@ final class View
         return sprintf(
             '<time datetime="%s" data-local>%s UTC</time>',
             gmdate('Y-m-d\TH:i:s\Z', $timestamp),
-            gmdate('d/m/Y H:i', $timestamp),
+            gmdate(I18n::setting('datetime'), $timestamp),
         );
     }
 
@@ -79,7 +176,7 @@ final class View
             $n /= 1024;
             $i++;
         }
-        return number_format($n, $i === 0 ? 0 : 1, ',', '.') . ' ' . $units[$i];
+        return number_format($n, $i === 0 ? 0 : 1, I18n::setting('decimal'), I18n::setting('thousands')) . ' ' . $units[$i];
     }
 
     private function capture(string $template, array $data): string

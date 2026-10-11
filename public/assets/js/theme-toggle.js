@@ -3,7 +3,8 @@
 
     const KEY = 'fd-theme';
     const ORDER = [null, 'light', 'dark'];
-    const LABELS = { auto: 'Tema: automatico', light: 'Tema: chiaro', dark: 'Tema: scuro' };
+    const t = (key) => (window.FileDrop && window.FileDrop.t ? window.FileDrop.t(key) : key);
+    const label = (theme) => t('js.theme.' + theme);
     const root = document.documentElement;
 
     const read = () => {
@@ -28,9 +29,9 @@
     };
 
     const sync = (button) => {
-        const label = LABELS[root.getAttribute('data-theme') || 'auto'];
-        button.setAttribute('aria-label', label);
-        button.title = label;
+        const text = label(root.getAttribute('data-theme') || 'auto');
+        button.setAttribute('aria-label', text);
+        button.title = text;
     };
 
     apply(read());

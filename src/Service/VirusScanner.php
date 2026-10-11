@@ -6,6 +6,7 @@ namespace FileDrop\Service;
 use FileDrop\Exception\HttpException;
 use FileDrop\Exception\VirusDetectedException;
 use FileDrop\Support\Config;
+use FileDrop\Support\I18n;
 
 final class VirusScanner
 {
@@ -22,13 +23,13 @@ final class VirusScanner
         } catch (\RuntimeException $e) {
             error_log('[antivirus] ' . $e->getMessage());
             if ($this->config->clamavRejectOnError) {
-                throw new HttpException(503, 'Controllo antivirus non disponibile: riprova più tardi.');
+                throw new HttpException(503, I18n::t('err.antivirus_down'));
             }
             return;
         }
 
         if ($signature !== null) {
-            throw new VirusDetectedException(sprintf('Il file «%s» è stato rifiutato: rilevato malware (%s).', $name, $signature));
+            throw new VirusDetectedException(I18n::t('err.malware', ['name' => $name, 'signature' => $signature]));
         }
     }
 

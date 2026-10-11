@@ -10,6 +10,7 @@ use FileDrop\Http\Response;
 use FileDrop\Service\ChunkService;
 use FileDrop\Service\FileService;
 use FileDrop\Support\Config;
+use FileDrop\Support\I18n;
 
 final class ApiController extends Controller
 {
@@ -25,7 +26,7 @@ final class ApiController extends Controller
     {
         $postMax = $this->iniBytes((string) ini_get('post_max_size'));
         if ($request->files === [] && $postMax > 0 && $request->contentLength() > $postMax) {
-            throw new HttpException(413, 'Il file supera il limite del server (post_max_size). Usa il caricamento a blocchi: POST /api/uploads.');
+            throw new HttpException(413, I18n::t('err.post_max'));
         }
 
         [$ttl, $password, $maxDownloads, $encrypted] = $this->options($request);
@@ -47,11 +48,11 @@ final class ApiController extends Controller
     {
         $body = json_decode((string) stream_get_contents(fopen('php://input', 'rb'), 65536), true);
         if (!is_array($body) || !is_array($body['files'] ?? null)) {
-            throw new HttpException(400, 'Corpo JSON non valido: atteso {"files": [{"name": "...", "size": 123}]}.');
+            throw new HttpException(400, I18n::t('err.bad_json'));
         }
         $encrypted = $body['encrypted'] ?? false;
         if (!is_bool($encrypted)) {
-            throw new HttpException(422, '"encrypted" deve essere true o false.');
+            throw new HttpException(422, I18n::t('err.encrypted_bool'));
         }
 
         $this->chunks->maybePurge();
@@ -69,12 +70,12 @@ final class ApiController extends Controller
         $index = $request->query['index'] ?? '0';
         $offset = $request->query['offset'] ?? null;
         if (!is_string($index) || !ctype_digit($index) || !is_string($offset) || !ctype_digit($offset)) {
-            throw new HttpException(422, '"index" e "offset" devono essere numeri interi.');
+            throw new HttpException(422, I18n::t('err.index_offset'));
         }
 
         $stream = fopen('php://input', 'rb');
         if ($stream === false) {
-            throw new HttpException(500, 'Impossibile leggere il blocco.');
+            throw new HttpException(500, I18n::t('err.read_chunk'));
         }
 
         $data = $this->chunks->append($params['id'], (int) $index, (int) $offset, $stream, $request->contentLength());
@@ -111,7 +112,7 @@ final class ApiController extends Controller
     {
         $ttl = $request->post['expires_in'] ?? null;
         if ($ttl !== null && (!is_scalar($ttl) || !ctype_digit((string) $ttl))) {
-            throw new HttpException(422, '"expires_in" deve essere un numero di secondi.');
+            throw new HttpException(422, I18n::t('err.expires_in'));
         }
         $password = $request->post['password'] ?? null;
 
@@ -120,12 +121,12 @@ final class ApiController extends Controller
             $maxDownloads = null;
         }
         if ($maxDownloads !== null && (!is_scalar($maxDownloads) || !ctype_digit((string) $maxDownloads))) {
-            throw new HttpException(422, '"max_downloads" deve essere un numero intero positivo.');
+            throw new HttpException(422, I18n::t('err.max_downloads'));
         }
 
         $encrypted = $request->post['encrypted'] ?? null;
         if ($encrypted !== null && (!is_scalar($encrypted) || !in_array((string) $encrypted, ['', '0', '1'], true))) {
-            throw new HttpException(422, '"encrypted" deve essere 0 o 1.');
+            throw new HttpException(422, I18n::t('err.encrypted_01'));
         }
 
         return [

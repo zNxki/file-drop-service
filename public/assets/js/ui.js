@@ -1,9 +1,17 @@
 (() => {
     'use strict';
 
-    const dateFmt = new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' });
+    const FD = window.FileDrop;
+    const dateFmt = new Intl.DateTimeFormat(FD.tag, { dateStyle: 'medium', timeStyle: 'short' });
 
-    window.FileDrop.page(() => {
+    document.addEventListener('click', (e) => {
+        const link = e.target.closest && e.target.closest('a[data-lang]');
+        if (!link) return;
+        const rest = location.pathname.replace(new RegExp('^/' + FD.lang + '(?=/|$)'), '');
+        link.href = '/' + link.dataset.lang + rest + location.search + location.hash;
+    });
+
+    FD.page(() => {
         document.querySelectorAll('time[data-expires], time[data-local]').forEach((t) => {
             t.textContent = dateFmt.format(new Date(t.getAttribute('datetime')));
         });
@@ -13,7 +21,7 @@
             b.addEventListener('click', () => {
                 const show = input.type === 'password';
                 input.type = show ? 'text' : 'password';
-                b.textContent = show ? 'Nascondi' : 'Mostra';
+                b.textContent = show ? FD.t('js.hide') : FD.t('js.show');
                 b.setAttribute('aria-pressed', String(show));
             });
         });

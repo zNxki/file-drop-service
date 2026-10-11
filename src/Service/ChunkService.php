@@ -5,6 +5,7 @@ namespace FileDrop\Service;
 
 use FileDrop\Exception\HttpException;
 use FileDrop\Support\Config;
+use FileDrop\Support\I18n;
 
 final class ChunkService
 {
@@ -22,13 +23,13 @@ final class ChunkService
     {
         $count = count($declared);
         if ($count === 0) {
-            throw new HttpException(400, 'Nessun file dichiarato.');
+            throw new HttpException(400, I18n::t('err.no_files_declared'));
         }
         if ($count > $this->files->maxFiles()) {
-            throw new HttpException(422, sprintf('Puoi caricare al massimo %d file alla volta.', $this->files->maxFiles()));
+            throw new HttpException(422, I18n::t('err.too_many', ['max' => $this->files->maxFiles()]));
         }
         if ($encrypted && $count > 1) {
-            throw new HttpException(422, 'I file cifrati vanno inviati come un unico archivio: crea lo zip nel browser prima di cifrare.');
+            throw new HttpException(422, I18n::t('err.encrypted_single'));
         }
 
         $entries = [];
@@ -37,7 +38,7 @@ final class ChunkService
             $name = is_array($item) ? ($item['name'] ?? null) : null;
             $size = is_array($item) ? ($item['size'] ?? null) : null;
             if (!is_string($name) || !is_int($size) || $size <= 0) {
-                throw new HttpException(422, 'Ogni file deve avere "name" e "size" (intero positivo).');
+                throw new HttpException(422, I18n::t('err.file_invalid'));
             }
             $entries[] = ['name' => $name, 'size' => $size];
             $total += $size;
@@ -45,9 +46,7 @@ final class ChunkService
 
         $limit = $this->files->sizeLimit($count, $encrypted);
         if ($total > $limit) {
-            throw new HttpException(413, $count > 1
-                ? 'Il totale dei file supera il limite consentito (' . $this->files->formatBytes($limit) . ').'
-                : 'Il file supera il limite consentito (' . $this->files->formatBytes($limit) . ').');
+            throw new HttpException(413, I18n::t($count > 1 ? 'err.total_over' : 'err.file_over', ['limit' => $this->files->formatBytes($limit)]));
         }
 
         if ($client !== '') {
@@ -57,7 +56,7 @@ final class ChunkService
         $id = bin2hex(random_bytes(16));
         $dir = $this->dir($id);
         if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) {
-            throw new HttpException(500, 'Cartella di archiviazione non scrivibile.');
+            throw new HttpException(500, I18n::t('err.storage_unwritable'));
         }
         file_put_contents($dir . '/meta.json', json_encode([
             'created' => time(),
@@ -88,34 +87,34 @@ final class ChunkService
         $meta = $this->meta($id);
         $entry = $meta['files'][$index] ?? null;
         if ($entry === null) {
-            throw new HttpException(404, 'File non presente in questo caricamento.');
+            throw new HttpException(404, I18n::t('err.not_in_upload'));
         }
         if ($length <= 0 || $length > self::MAX_CHUNK) {
-            throw new HttpException(413, sprintf('Ogni blocco deve essere tra 1 byte e %s.', $this->files->formatBytes(self::MAX_CHUNK)));
+            throw new HttpException(413, I18n::t('err.chunk_size', ['max' => $this->files->formatBytes(self::MAX_CHUNK)]));
         }
         if ($offset < 0 || $offset + $length > $entry['size']) {
-            throw new HttpException(422, 'Il blocco supera la dimensione dichiarata del file.');
+            throw new HttpException(422, I18n::t('err.chunk_over'));
         }
 
         $handle = @fopen($this->part($id, $index), 'c+b');
         if ($handle === false) {
-            throw new HttpException(500, 'Impossibile salvare il blocco.');
+            throw new HttpException(500, I18n::t('err.chunk_save'));
         }
 
         try {
             if (!flock($handle, LOCK_EX)) {
-                throw new HttpException(500, 'Impossibile salvare il blocco.');
+                throw new HttpException(500, I18n::t('err.chunk_save'));
             }
             $current = (int) (fstat($handle)['size'] ?? 0);
             if ($offset !== $current) {
-                throw new HttpException(409, 'Offset non valido: il server ha ricevuto ' . $current . ' byte.');
+                throw new HttpException(409, I18n::t('err.offset', ['received' => $current]));
             }
 
             fseek($handle, $offset);
             $written = stream_copy_to_stream($stream, $handle, $length);
             fflush($handle);
             if ($written !== $length) {
-                throw new HttpException(400, 'Blocco incompleto: riprova.');
+                throw new HttpException(400, I18n::t('err.chunk_incomplete'));
             }
             flock($handle, LOCK_UN);
         } finally {
@@ -132,7 +131,7 @@ final class ChunkService
         foreach ($meta['files'] as $i => $entry) {
             clearstatcache(true, $this->part($id, $i));
             if ($this->received($id, $i) !== $entry['size']) {
-                throw new HttpException(409, 'Caricamento incompleto: mancano dei byte, riprendilo prima di completare.');
+                throw new HttpException(409, I18n::t('err.upload_incomplete'));
             }
             $uploads[] = [
                 'name' => $entry['name'],
@@ -200,11 +199,11 @@ final class ChunkService
     private function meta(string $id): array
     {
         if (!$this->exists($id)) {
-            throw new HttpException(404, 'Caricamento non trovato o scaduto: ricomincia.');
+            throw new HttpException(404, I18n::t('err.upload_missing'));
         }
         $meta = json_decode((string) file_get_contents($this->dir($id) . '/meta.json'), true);
         if (!is_array($meta) || !isset($meta['files']) || !is_array($meta['files'])) {
-            throw new HttpException(404, 'Caricamento non trovato o scaduto: ricomincia.');
+            throw new HttpException(404, I18n::t('err.upload_missing'));
         }
         return $meta;
     }

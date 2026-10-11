@@ -31,6 +31,17 @@ final readonly class Request
         );
     }
 
+    public function withPath(string $path): self
+    {
+        return new self($this->method, $path, $this->query, $this->post, $this->files, $this->server, $this->trustedProxies);
+    }
+
+    public function cookie(string $name): ?string
+    {
+        $value = $_COOKIE[$name] ?? null;
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
     public function header(string $name): ?string
     {
         $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));

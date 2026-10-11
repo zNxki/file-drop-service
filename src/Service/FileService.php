@@ -9,6 +9,7 @@ use FileDrop\Repository\StatsRepository;
 use FileDrop\Support\Config;
 use FileDrop\Model\StoredFile;
 use FileDrop\Model\StoredItem;
+use FileDrop\Support\I18n;
 use FileDrop\Support\ZipStream;
 
 final class FileService
@@ -46,34 +47,28 @@ final class FileService
     {
         $ttl ??= $this->config->defaultExpiry;
         if ($ttl < 60 || $ttl > $this->config->maxExpiry) {
-            throw new HttpException(422, sprintf(
-                'La scadenza deve essere tra 60 e %d secondi.',
-                $this->config->maxExpiry
-            ));
+            throw new HttpException(422, I18n::t('err.expiry_range', ['max' => $this->config->maxExpiry]));
         }
 
         $password = ($password === null || $password === '') ? null : $password;
         if ($password !== null && (strlen($password) < 4 || strlen($password) > 200)) {
-            throw new HttpException(422, 'La password deve contenere da 4 a 200 caratteri.');
+            throw new HttpException(422, I18n::t('err.password_len'));
         }
 
         if ($maxDownloads !== null && ($maxDownloads < 1 || $maxDownloads > self::MAX_DOWNLOADS)) {
-            throw new HttpException(422, sprintf('Il numero di download deve essere tra 1 e %d.', self::MAX_DOWNLOADS));
+            throw new HttpException(422, I18n::t('err.downloads_range', ['max' => self::MAX_DOWNLOADS]));
         }
 
         $uploads = array_values($uploads);
         $count = count($uploads);
         if ($count === 0) {
-            throw new HttpException(400, 'Nessun file ricevuto: invia i file nel campo "file" (per più file usa "file[]").');
+            throw new HttpException(400, I18n::t('err.no_file_received'));
         }
         if ($count > $this->maxFiles()) {
-            throw new HttpException(422, sprintf(
-                'Puoi caricare al massimo %d file alla volta (se ne hai inviati di più, alcuni potrebbero essere stati scartati dal server).',
-                $this->maxFiles()
-            ));
+            throw new HttpException(422, I18n::t('err.too_many_dropped', ['max' => $this->maxFiles()]));
         }
         if ($encrypted && $count > 1) {
-            throw new HttpException(422, 'I file cifrati vanno inviati come un unico archivio: crea lo zip nel browser prima di cifrare.');
+            throw new HttpException(422, I18n::t('err.encrypted_single'));
         }
 
         $multiple = $count > 1;
@@ -86,12 +81,10 @@ final class FileService
         }
         $total = array_sum($sizes);
         if ($total > $maxSize) {
-            throw new HttpException(413, $multiple
-                ? "Il totale dei file supera il limite consentito ($limit)."
-                : "Il file supera il limite consentito ($limit).");
+            throw new HttpException(413, I18n::t($multiple ? 'err.total_over' : 'err.file_over', ['limit' => $limit]));
         }
         if ($encrypted && !$this->hasEncryptionHeader((string) $uploads[0]['tmp_name'])) {
-            throw new HttpException(422, 'Il file non è nel formato cifrato previsto.');
+            throw new HttpException(422, I18n::t('err.bad_encrypted_format'));
         }
         if ($client !== '') {
             $this->quotas->assert($client, $total);
@@ -104,7 +97,7 @@ final class FileService
 
         $dir = $this->config->storagePath . '/uploads';
         if (!is_dir($dir) && !mkdir($dir, 0750, true) && !is_dir($dir)) {
-            throw new HttpException(500, 'Cartella di archiviazione non scrivibile.');
+            throw new HttpException(500, I18n::t('err.storage_unwritable'));
         }
 
         $moved = [];
@@ -118,7 +111,7 @@ final class FileService
                     ? @rename((string) $upload['tmp_name'], $target)
                     : move_uploaded_file($upload['tmp_name'], $target);
                 if (!$stored) {
-                    throw new HttpException(500, 'Impossibile salvare il file.');
+                    throw new HttpException(500, I18n::t('err.save_file'));
                 }
                 @chmod($target, 0640);
                 $moved[] = $target;
@@ -172,7 +165,7 @@ final class FileService
         foreach ($moved as $path) {
             @unlink($path);
         }
-        throw new HttpException(500, 'Impossibile generare un codice univoco.');
+        throw new HttpException(500, I18n::t('err.no_code'));
     }
 
     public function assertQuota(string $client, int $bytes): void
@@ -189,14 +182,14 @@ final class FileService
     {
         $file = $this->repository->find($code);
         if ($file === null) {
-            throw new HttpException(404, 'File non trovato. Controlla il codice.');
+            throw new HttpException(404, I18n::t('err.not_found'));
         }
         if ($file->isExpired()) {
             $this->remove($file);
-            throw new HttpException(410, 'Il file è scaduto ed è stato eliminato.');
+            throw new HttpException(410, I18n::t('err.expired'));
         }
         if ($file->isExhausted()) {
-            throw new HttpException(410, 'Il file ha raggiunto il numero massimo di download.');
+            throw new HttpException(410, I18n::t('err.exhausted'));
         }
         return $file;
     }
@@ -207,11 +200,11 @@ final class FileService
             return;
         }
         if ($password === null || $password === '') {
-            throw new HttpException(401, 'Questo file è protetto da password.');
+            throw new HttpException(401, I18n::t('err.protected'));
         }
         if (!password_verify($password, (string) $file->passwordHash)) {
             usleep(300_000);
-            throw new HttpException(403, 'Password errata.');
+            throw new HttpException(403, I18n::t('err.wrong_password'));
         }
     }
 
@@ -220,7 +213,7 @@ final class FileService
         $path = $this->config->storagePath . '/uploads/' . $file->storedName;
         if (!is_file($path)) {
             $this->repository->delete($file->code);
-            throw new HttpException(404, 'Il file non è più disponibile.');
+            throw new HttpException(404, I18n::t('err.unavailable'));
         }
         return $path;
     }
@@ -230,7 +223,7 @@ final class FileService
         $handle = $this->openHandle($file);
         if (!$this->repository->claimDownload($file->code)) {
             fclose($handle);
-            throw new HttpException(410, 'Il file ha raggiunto il numero massimo di download.');
+            throw new HttpException(410, I18n::t('err.exhausted'));
         }
         $this->logDownload($file);
         return $handle;
@@ -241,7 +234,7 @@ final class FileService
         $items = $this->repository->items($file->code);
         if ($items === [] || count($items) !== $file->itemCount) {
             $this->remove($file);
-            throw new HttpException(404, 'Il file non è più disponibile.');
+            throw new HttpException(404, I18n::t('err.unavailable'));
         }
 
         $entries = [];
@@ -257,12 +250,12 @@ final class FileService
             if ($handle === false) {
                 $close();
                 $this->remove($file);
-                throw new HttpException(404, 'Il file non è più disponibile.');
+                throw new HttpException(404, I18n::t('err.unavailable'));
             }
             $entries[] = ['name' => $item->originalName, 'handle' => $handle, 'size' => $item->size, 'crc' => $item->crc32];
             if ((fstat($handle)['size'] ?? -1) !== $item->size) {
                 $close();
-                throw new HttpException(500, 'Impossibile leggere il file.');
+                throw new HttpException(500, I18n::t('err.read_file'));
             }
         }
 
@@ -270,12 +263,12 @@ final class FileService
             $zip = new ZipStream($entries, $file->createdAt);
         } catch (\LengthException $e) {
             $close();
-            throw new HttpException(500, 'Impossibile creare l\'archivio.');
+            throw new HttpException(500, I18n::t('err.archive_create'));
         }
 
         if (!$this->repository->claimDownload($file->code)) {
             $close();
-            throw new HttpException(410, 'Il file ha raggiunto il numero massimo di download.');
+            throw new HttpException(410, I18n::t('err.exhausted'));
         }
         $this->logDownload($file);
 
@@ -299,7 +292,7 @@ final class FileService
     {
         $file = $this->get($code);
         if ($token === null || !hash_equals($file->deleteTokenHash, hash('sha256', $token))) {
-            throw new HttpException(403, 'Token di eliminazione non valido.');
+            throw new HttpException(403, I18n::t('err.bad_delete_token'));
         }
         $this->remove($file);
     }
@@ -334,7 +327,7 @@ final class FileService
     {
         $file = $this->repository->find($code);
         if ($file === null) {
-            throw new HttpException(404, 'File non trovato: forse è già stato eliminato.');
+            throw new HttpException(404, I18n::t('err.already_gone'));
         }
         $this->remove($file);
         return $file;
@@ -384,11 +377,11 @@ final class FileService
     private function openHandle(StoredFile $file)
     {
         if ($file->isBundle()) {
-            throw new HttpException(404, 'Anteprima non disponibile per questo file.');
+            throw new HttpException(404, I18n::t('err.preview_unavailable'));
         }
         $handle = @fopen($this->path($file), 'rb');
         if ($handle === false) {
-            throw new HttpException(500, 'Impossibile leggere il file.');
+            throw new HttpException(500, I18n::t('err.read_file'));
         }
         return $handle;
     }
@@ -408,20 +401,22 @@ final class FileService
     private function checkUpload(array $upload, string $limit, bool $named): int
     {
         if (!isset($upload['error']) || is_array($upload['error'])) {
-            throw new HttpException(400, 'Nessun file ricevuto: invia i file nel campo "file" (per più file usa "file[]").');
+            throw new HttpException(400, I18n::t('err.no_file_received'));
         }
 
-        $label = $named ? ' «' . $this->sanitizeName((string) ($upload['name'] ?? '')) . '»' : '';
+        $name = $this->sanitizeName((string) ($upload['name'] ?? ''));
         match ($upload['error']) {
             UPLOAD_ERR_OK => null,
-            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => throw new HttpException(413, "Il file$label supera il limite consentito ($limit)."),
-            UPLOAD_ERR_NO_FILE => throw new HttpException(400, 'Nessun file ricevuto.'),
-            default => throw new HttpException(500, 'Caricamento non riuscito, riprova.'),
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => throw new HttpException(413, $named
+                ? I18n::t('err.file_over_named', ['name' => $name, 'limit' => $limit])
+                : I18n::t('err.file_over', ['limit' => $limit])),
+            UPLOAD_ERR_NO_FILE => throw new HttpException(400, I18n::t('err.no_file')),
+            default => throw new HttpException(500, I18n::t('err.upload_failed')),
         };
 
         $size = (int) $upload['size'];
         if ($size <= 0) {
-            throw new HttpException(422, $named ? "Il file$label è vuoto." : 'Il file è vuoto.');
+            throw new HttpException(422, $named ? I18n::t('err.empty_named', ['name' => $name]) : I18n::t('err.empty'));
         }
         return $size;
     }
@@ -445,7 +440,7 @@ final class FileService
     {
         $hash = hash_file('crc32b', $path);
         if ($hash === false) {
-            throw new HttpException(500, 'Impossibile leggere il file.');
+            throw new HttpException(500, I18n::t('err.read_file'));
         }
         return (int) hexdec($hash);
     }

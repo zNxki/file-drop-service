@@ -6,6 +6,7 @@ namespace FileDrop\Service;
 use FileDrop\Exception\HttpException;
 use FileDrop\Repository\{LimitEventRepository, QuotaRepository};
 use FileDrop\Support\Config;
+use FileDrop\Support\I18n;
 
 final class QuotaService
 {
@@ -43,29 +44,24 @@ final class QuotaService
             $active = $this->repository->active($key, $now);
 
             if ($config->quotaMaxFiles > 0 && $active['files'] >= $config->quotaMaxFiles) {
-                throw new QuotaExceeded('files', sprintf(
-                    'Hai raggiunto il numero massimo di caricamenti attivi (%d). Elimina un file o attendi la scadenza.',
-                    $config->quotaMaxFiles
-                ));
+                throw new QuotaExceeded('files', I18n::t('err.quota_files', ['max' => $config->quotaMaxFiles]));
             }
             if ($config->quotaStorage > 0 && $active['bytes'] + $bytes > $config->quotaStorage) {
-                throw new QuotaExceeded('storage', sprintf(
-                    'Spazio insufficiente: occupi %s su %s e questo caricamento ne richiede %s. Elimina un file o attendi la scadenza.',
-                    $this->format($active['bytes']),
-                    $this->format($config->quotaStorage),
-                    $this->format($bytes)
-                ));
+                throw new QuotaExceeded('storage', I18n::t('err.quota_storage', [
+                    'used' => $this->format($active['bytes']),
+                    'total' => $this->format($config->quotaStorage),
+                    'needed' => $this->format($bytes),
+                ]));
             }
         }
 
         if ($config->quotaDaily > 0) {
             $sent = $this->repository->uploadedSince($key, $now - self::DAILY_WINDOW);
             if ($sent + $bytes > $config->quotaDaily) {
-                throw new QuotaExceeded('daily', sprintf(
-                    'Limite giornaliero di caricamento raggiunto (%s nelle ultime 24 ore su %s). Riprova più tardi.',
-                    $this->format($sent),
-                    $this->format($config->quotaDaily)
-                ));
+                throw new QuotaExceeded('daily', I18n::t('err.quota_daily', [
+                    'sent' => $this->format($sent),
+                    'limit' => $this->format($config->quotaDaily),
+                ]));
             }
         }
     }

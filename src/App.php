@@ -9,7 +9,7 @@ use FileDrop\Exception\HttpException;
 use FileDrop\Http\{Request, Response, Router};
 use FileDrop\Repository\{FileRepository, IpBlockRepository, LimitEventRepository, LoginAttemptRepository, QuotaRepository, StatsRepository, UserRepository};
 use FileDrop\Service\{ChunkService, CodeGenerator, FileService, QuotaService, VirusScanner};
-use FileDrop\Support\{AdminSession, Config, Database, IpRange, RateLimiter, View};
+use FileDrop\Support\{AdminSession, Config, Database, I18n, IpRange, RateLimiter, View};
 
 final class App
 {
@@ -29,6 +29,7 @@ final class App
     {
         date_default_timezone_set('UTC');
 
+        I18n::boot($root);
         $config = Config::load($root);
         $pdo = Database::connect($config);
         $stats = new StatsRepository($pdo);
@@ -107,20 +108,78 @@ final class App
     {
         $request = Request::fromGlobals($this->config->trustedProxies);
         $this->view->fragment($request->header('X-Fd-Nav') !== null && !$request->isApi());
+        $prefixed = false;
 
         try {
+            [$request, $redirect, $prefixed] = $this->resolveLocale($request);
             $this->assertNotBlocked($request);
             $this->limiter->check($request);
-            $response = $this->router->dispatch($request);
+            $response = $redirect !== null
+                ? Response::redirect($redirect, 302)
+                    ->withHeader('Cache-Control', 'no-store')
+                    ->withHeader('Vary', 'Accept-Language, Cookie')
+                : $this->router->dispatch($request);
         } catch (HttpException $e) {
             $response = $this->errorResponse($request, $e);
         } catch (\Throwable $e) {
             error_log((string) $e);
-            $message = $this->config->debug ? $e->getMessage() : 'Errore interno del server.';
+            $message = $this->config->debug ? $e->getMessage() : I18n::t('err.internal');
             $response = $this->errorResponse($request, new HttpException(500, $message));
         }
 
-        $response->send($request->isSecure() || str_starts_with($this->config->appUrl, 'https://'));
+        $secure = $request->isSecure() || str_starts_with($this->config->appUrl, 'https://');
+        if ($prefixed && $request->cookie(I18n::COOKIE) !== I18n::current()) {
+            $response = $response->withHeader('Set-Cookie', sprintf(
+                '%s=%s; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly%s',
+                I18n::COOKIE,
+                I18n::current(),
+                $secure ? '; Secure' : '',
+            ));
+        }
+
+        $response->send($secure);
+    }
+
+    private function resolveLocale(Request $request): array
+    {
+        $path = $request->path;
+
+        if (preg_match('~^/(admin|api|assets)(?:/|$)~', $path, $m) === 1) {
+            I18n::set($m[1] === 'admin' ? I18n::default() : $this->negotiate($request));
+            return [$request, null, false];
+        }
+
+        [$first, $rest] = array_pad(explode('/', ltrim($path, '/'), 2), 2, '');
+        if (I18n::has($first)) {
+            I18n::set($first);
+            $stripped = '/' . $rest;
+            $this->view->localize($stripped, $this->origin($request));
+            return [$request->withPath($stripped), null, true];
+        }
+
+        I18n::set($this->negotiate($request));
+        $this->view->localize($path, $this->origin($request));
+
+        $direct = $request->method !== 'GET' && $request->method !== 'HEAD'
+            || preg_match('~^/d/[A-Za-z0-9]+/(?:download|preview)$~', $path) === 1;
+        if ($direct) {
+            return [$request, null, false];
+        }
+
+        $query = (string) ($request->server['QUERY_STRING'] ?? '');
+        $target = '/' . I18n::current() . ($path === '/' ? '' : $path) . ($query !== '' ? '?' . $query : '');
+
+        return [$request, $target, false];
+    }
+
+    private function origin(Request $request): string
+    {
+        return $this->config->appUrl !== '' ? $this->config->appUrl : $request->origin();
+    }
+
+    private function negotiate(Request $request): string
+    {
+        return I18n::negotiate($request->cookie(I18n::COOKIE), $request->header('Accept-Language'));
     }
 
     private function assertNotBlocked(Request $request): void
@@ -133,7 +192,7 @@ final class App
         }
 
         if (IpRange::matches($request->ip(), $ranges)) {
-            throw new HttpException(403, 'Accesso non consentito da questo indirizzo.');
+            throw new HttpException(403, I18n::t('err.blocked'));
         }
     }
 

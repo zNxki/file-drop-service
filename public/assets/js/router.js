@@ -48,7 +48,7 @@
         }
     };
 
-    const EXCLUDED = /^\/(?:api|assets)(?:\/|$)|^\/d\/[^/]+\/(?:download|preview)\/?$/;
+    const EXCLUDED = /^\/(?:api|assets)(?:\/|$)|^(?:\/[a-z]{2,3}(?:-[A-Za-z]+)?)?\/d\/[^/]+\/(?:download|preview)\/?$/;
     const TTL = 30000;
     const cache = new Map();
 
